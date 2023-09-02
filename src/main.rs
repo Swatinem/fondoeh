@@ -1,10 +1,15 @@
+extern crate alloc; // because of `BakedDataProvider`
+
 use anyhow::Result;
 
-mod scraper;
+pub mod data;
+pub mod report;
+pub mod scraper;
+pub mod taxes;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let report = scraper::fetch_reports("DE000A0F5UH1").await?;
+    let report = scraper::fetch_reports("IE00B9M6RS56").await?;
     // dbg!(&report);
 
     println!("ISIN: {}", report.isin);

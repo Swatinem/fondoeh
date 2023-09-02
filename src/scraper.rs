@@ -88,6 +88,27 @@ pub async fn fetch_reports(isin: &str) -> Result<Report> {
     for info in list.list {
         // dbg!(&info);
 
+        let (date, _rest) = info
+            .date
+            .split_once('T')
+            .context("should be a ISO8601 datetime")?;
+
+        if date < "2020-01-01" {
+            continue;
+        }
+
+        let rate = match info.currency.as_str() {
+            "EUR" => 1.0,
+            "USD" => {
+                if rates.is_empty() {
+                    rates = fetch_usd_rates().await?;
+                    // dbg!(&rates);
+                }
+                rates.get(date).copied().unwrap_or(1.0)
+            }
+            currency => anyhow::bail!("currency `{currency}` not supported"),
+        };
+
         let report_url = format!("{OEKB_REPORT_BASE}/{}/privatAnl", info.report_id);
         // dbg!(&report_url);
 
@@ -97,23 +118,6 @@ pub async fn fetch_reports(isin: &str) -> Result<Report> {
             .send()
             .await?;
         let report: raw::Report = report.json().await?;
-
-        let (date, _rest) = info
-            .date
-            .split_once('T')
-            .context("should be a ISO8601 datetime")?;
-
-        let rate = match info.currency.as_str() {
-            "EUR" => 1.0,
-            "USD" => {
-                if rates.is_empty() {
-                    rates = fetch_usd_rates().await?;
-                    dbg!(&rates);
-                }
-                rates.get(date).copied().unwrap_or(1.0)
-            }
-            currency => anyhow::bail!("currency `{currency}` not supported"),
-        };
 
         let mut row = ReportRow {
             report_id: info.report_id,
