@@ -2,18 +2,18 @@ use std::fmt::{self, Arguments, Write};
 
 use chrono::Datelike;
 use fixed_decimal::{DoublePrecision, FixedDecimal};
-use icu::decimal::FixedDecimalFormatter;
-use icu::locid::{locale, Locale};
+use icu_decimal::FixedDecimalFormatter;
+use icu_locid::{locale, Locale};
 use writeable::Writeable;
 
 use crate::data::{Bestand, Date, Number, Security, SecurityType, Steuern, TransactionKind};
 
 const LOCALE: Locale = locale!("de-AT");
 
-pub const WIDTH: usize = 70;
+pub const WIDTH: usize = 80;
 
 mod provider {
-    // icu4x-datagen --keys-for-bin ... --locales de-at --format=mod --pretty --overwrite
+    // icu4x-datagen --keys-for-bin ... --locales de-at --format=mod --use-separate-crates --pretty --overwrite
     include!("../icu4x_data/mod.rs");
 }
 

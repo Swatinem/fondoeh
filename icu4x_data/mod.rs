@@ -19,8 +19,8 @@ use icu_provider::prelude::*;
 macro_rules! impl_data_provider {
     ($ provider : path) => {
         #[clippy::msrv = "1.61"]
-        impl DataProvider<::icu::decimal::provider::DecimalSymbolsV1Marker> for $provider {
-            fn load(&self, req: DataRequest) -> Result<DataResponse<::icu::decimal::provider::DecimalSymbolsV1Marker>, DataError> {
+        impl DataProvider<::icu_decimal::provider::DecimalSymbolsV1Marker> for $provider {
+            fn load(&self, req: DataRequest) -> Result<DataResponse<::icu_decimal::provider::DecimalSymbolsV1Marker>, DataError> {
                 decimal::symbols_v1::lookup(&req.locale)
                     .map(zerofrom::ZeroFrom::zero_from)
                     .map(DataPayload::from_owned)
@@ -28,7 +28,7 @@ macro_rules! impl_data_provider {
                         metadata: Default::default(),
                         payload: Some(payload),
                     })
-                    .ok_or_else(|| DataErrorKind::MissingLocale.with_req(::icu::decimal::provider::DecimalSymbolsV1Marker::KEY, req))
+                    .ok_or_else(|| DataErrorKind::MissingLocale.with_req(::icu_decimal::provider::DecimalSymbolsV1Marker::KEY, req))
             }
         }
     };
@@ -51,7 +51,7 @@ macro_rules! impl_any_provider {
         #[clippy::msrv = "1.61"]
         impl AnyProvider for $provider {
             fn load_any(&self, key: DataKey, req: DataRequest) -> Result<AnyResponse, DataError> {
-                const DECIMALSYMBOLSV1MARKER: ::icu_provider::DataKeyHash = ::icu::decimal::provider::DecimalSymbolsV1Marker::KEY.hashed();
+                const DECIMALSYMBOLSV1MARKER: ::icu_provider::DataKeyHash = ::icu_decimal::provider::DecimalSymbolsV1Marker::KEY.hashed();
                 match key.hashed() {
                     DECIMALSYMBOLSV1MARKER => decimal::symbols_v1::lookup(&req.locale).map(AnyPayload::from_static_ref),
                     _ => return Err(DataErrorKind::MissingDataKey.with_req(key, req)),

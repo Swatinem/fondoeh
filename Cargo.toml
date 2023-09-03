@@ -8,8 +8,8 @@ anyhow = "1.0.75"
 chrono = { version = "0.4.28", features = ["serde"] }
 fixed_decimal = { version = "0.5.3", features = ["ryu"] }
 glob = "0.3.1"
-icu = "1.2.0"
 icu_decimal = { version = "1.2.0", features = ["serde"] }
+icu_locid = "1.2.0"
 icu_provider = "1.2.0"
 icu_provider_adapters = "1.2.0"
 reqwest = { version = "0.11.20", features = ["json"] }
