@@ -49,7 +49,7 @@ impl Bestand {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct Steuern {
     pub dividendenerträge_863: Number,
     pub wertsteigerungen_994: Number,

@@ -3,6 +3,8 @@ use chrono::Days;
 use crate::data::{Bestand, Security, SecurityType, Steuern, Transaction, TransactionKind};
 use crate::scraper::{ReportRow, Scraper};
 
+const MELDUNG_DATUM_ABWEICHUNG: Days = Days::new(7);
+
 pub async fn do_taxes(scraper: &mut Scraper, security: &mut Security) {
     // transaktionen sortieren
     security.transaktionen.sort_by_key(|t| t.datum);
@@ -33,7 +35,15 @@ pub async fn do_taxes(scraper: &mut Scraper, security: &mut Security) {
                 break;
             };
             let transaktion_ist_vorher = next_transaktion
-                .map(|t| t.datum < next_meldung.date)
+                .map(|t| {
+                    if !next_meldung.is_yearly_report
+                        && matches!(t.typ, TransactionKind::Ausschüttung { .. })
+                    {
+                        t.datum + MELDUNG_DATUM_ABWEICHUNG < next_meldung.date
+                    } else {
+                        t.datum < next_meldung.date
+                    }
+                })
                 .unwrap_or(false);
             if transaktion_ist_vorher {
                 break;
@@ -60,7 +70,7 @@ pub async fn do_taxes(scraper: &mut Scraper, security: &mut Security) {
                     let nächste_transaktion_ist_ausschüttung = next_transaktion
                         .map(|t| {
                             matches!(t.typ, TransactionKind::Ausschüttung { .. })
-                                && t.datum < next_meldung.date + Days::new(5)
+                                && t.datum < next_meldung.date + MELDUNG_DATUM_ABWEICHUNG
                         })
                         .unwrap_or(false);
                     if nächste_transaktion_ist_ausschüttung {
@@ -68,6 +78,7 @@ pub async fn do_taxes(scraper: &mut Scraper, security: &mut Security) {
                         meldung = meldungen.next();
                         break;
                     } else {
+                        dbg!(security, next_transaktion, next_meldung);
                         panic!("meldung ohne Ausschüttung");
                     }
                 }
@@ -143,6 +154,9 @@ pub async fn do_taxes(scraper: &mut Scraper, security: &mut Security) {
                 if let Some(meldung) = meldung.take() {
                     // ausschüttung mit meldung
                     *melde_id = meldung.report_id;
+                    // wir nutzen hier das datum der meldung
+                    // die tatsächliche auszahlung kann wegen wochenende usw verzögert sein
+                    transaktion.datum = meldung.date;
                     steuern_für_meldung(&mut bestand, steuern, &meldung);
                 } else {
                     // ausschüttung ohne meldung

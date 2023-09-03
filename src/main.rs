@@ -33,14 +33,17 @@ async fn main() -> Result<()> {
     let files = glob::glob(&format!("{dir}/**/*.yaml"))?;
     for file in files {
         let file = file?;
-        let rdr = File::open(file)?;
+        let rdr = File::open(&file)?;
 
-        let mut security = serde_yaml::from_reader(rdr)?;
+        let mut security =
+            serde_yaml::from_reader(rdr).context(format!("failed parsing {}", file.display()))?;
 
         do_taxes(&mut scraper, &mut security).await;
 
         let mut writer = Writer::new(String::new());
-        let summe = &write_and_sum_report(&mut writer, &security, year, false);
+        let Some(summe) = write_and_sum_report(&mut writer, &security, year, false) else {
+            continue;
+        };
         auszahlung_gesamt += summe.0;
         steuer_gesamt += &summe.1;
 
@@ -59,6 +62,11 @@ async fn main() -> Result<()> {
     w.write_split("Auszahlung gesamt:", formatter.eur(auszahlung_gesamt));
     let nachzahlung = steuer_gesamt.nachzahlung();
     w.write_split("Steuernachzahlung:", formatter.eur(nachzahlung));
+    // let ertrag = auszahlung_gesamt - nachzahlung;
+    // w.write_split("TODO: Ertrag effektiv", formatter.eur(ertrag));
+    // if year.is_some() {
+    //     w.write_split("Ertrag effektiv pro Monat", formatter.eur(ertrag / 12.));
+    // }
 
     println!("{}", writer.into_inner());
 

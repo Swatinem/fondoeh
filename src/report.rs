@@ -136,7 +136,7 @@ pub fn write_and_sum_report<W: Write>(
     security: &Security,
     year: Option<i32>,
     print_sum: bool,
-) -> (Number, Steuern) {
+) -> Option<(Number, Steuern)> {
     let mut f = Formatter::new();
     let typ = match security.typ {
         SecurityType::Etf => "ETF",
@@ -156,12 +156,24 @@ pub fn write_and_sum_report<W: Write>(
         let date_start = Date::from_ymd_opt(year, 1, 1).unwrap();
         let date_end = Date::from_ymd_opt(year, 12, 31).unwrap();
 
+        // kauf erst nach dem gewählten jahr
+        if let Some(transaktion) = transaktionen.peek() {
+            if transaktion.datum > date_end {
+                return None;
+            }
+        }
+
         while let Some(transaktion) = transaktionen.peek() {
             if transaktion.datum >= date_start {
                 break;
             }
             bestand = transaktion.bestand.clone();
             transaktionen.next();
+        }
+
+        // alles verkauft vor dem gewählten jahr
+        if bestand.stück == 0.0 && transaktionen.peek().is_none() {
+            return None;
         }
 
         w.divider('=');
@@ -250,8 +262,10 @@ pub fn write_and_sum_report<W: Write>(
     );
 
     w.divider('=');
-    writeln!(w, "Summe:").unwrap();
-    print_steuern(w, &mut f, &steuern_gesamt);
+    if steuern_gesamt != Steuern::default() {
+        writeln!(w, "Summe:").unwrap();
+        print_steuern(w, &mut f, &steuern_gesamt);
+    }
 
     if print_sum {
         writeln!(w).unwrap();
@@ -260,7 +274,7 @@ pub fn write_and_sum_report<W: Write>(
         w.write_split("Steuernachzahlung:", f.eur(nachzahlung));
     }
 
-    (auszahlung_gesamt, steuern_gesamt)
+    Some((auszahlung_gesamt, steuern_gesamt))
 }
 
 pub fn print_steuern<W: Write>(w: &mut Writer<W>, f: &mut Formatter, steuer: &Steuern) {
