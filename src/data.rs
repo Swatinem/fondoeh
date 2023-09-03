@@ -1,7 +1,7 @@
 pub use chrono::naive::NaiveDate as Date;
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]
 pub enum SecurityType {
     Etf,
@@ -58,6 +58,17 @@ pub struct Steuern {
     pub ausschüttungsgleiche_erträge_937: Number,
     pub gezahlte_kest_899: Number,
     pub anrechenbare_quellensteuer_998: Number,
+}
+
+impl Steuern {
+    pub fn nachzahlung(&self) -> Number {
+        let erträge = self.dividendenerträge_863 + self.wertsteigerungen_994
+            - self.wertverluste_892
+            + self.ausschüttungen_898
+            + self.ausschüttungsgleiche_erträge_937;
+        let angesetzte_kest = erträge * 0.275;
+        angesetzte_kest - self.gezahlte_kest_899 - self.anrechenbare_quellensteuer_998
+    }
 }
 
 impl std::ops::AddAssign<&Self> for Steuern {

@@ -1,5 +1,6 @@
 use std::fmt::{self, Arguments, Write};
 
+use chrono::Datelike;
 use fixed_decimal::{DoublePrecision, FixedDecimal};
 use icu::decimal::FixedDecimalFormatter;
 use icu::locid::{locale, Locale};
@@ -9,7 +10,7 @@ use crate::data::{Bestand, Date, Number, Security, SecurityType, Steuern, Transa
 
 const LOCALE: Locale = locale!("de-AT");
 
-const WIDTH: usize = 70;
+pub const WIDTH: usize = 70;
 
 mod provider {
     // icu4x-datagen --keys-for-bin ... --locales de-at --format=mod --pretty --overwrite
@@ -104,14 +105,14 @@ impl<W: Write> Writer<W> {
         self.inner
     }
 
-    fn devider(&mut self, ch: char) {
+    pub fn divider(&mut self, ch: char) {
         for _ in 0..WIDTH {
             self.inner.write_char(ch).unwrap();
         }
         self.inner.write_char('\n').unwrap();
     }
 
-    fn write_split(&mut self, left: &str, right: &str) {
+    pub fn write_split(&mut self, left: &str, right: &str) {
         let pad = WIDTH - 1 - left.chars().count();
         writeln!(&mut self.inner, "{left} {right:>pad$}").unwrap();
     }
@@ -135,7 +136,7 @@ pub fn write_and_sum_report<W: Write>(
     security: &Security,
     year: Option<i32>,
     print_sum: bool,
-) -> Steuern {
+) -> (Number, Steuern) {
     let mut f = Formatter::new();
     let typ = match security.typ {
         SecurityType::Etf => "ETF",
@@ -148,6 +149,7 @@ pub fn write_and_sum_report<W: Write>(
 
     let mut bestand = Bestand::default();
     let mut steuern_gesamt = Steuern::default();
+    let mut auszahlung_gesamt = 0.0;
 
     let mut transaktionen = security.transaktionen.iter().peekable();
     let date_end = if let Some(year) = year {
@@ -159,9 +161,10 @@ pub fn write_and_sum_report<W: Write>(
                 break;
             }
             bestand = transaktion.bestand.clone();
+            transaktionen.next();
         }
 
-        w.devider('=');
+        w.divider('=');
         devider = '-';
         w.write_split_fmt(
             format_args!("Bestand am {date_start}:"),
@@ -179,13 +182,24 @@ pub fn write_and_sum_report<W: Write>(
             break;
         }
 
-        if last_date.map(|d| false).unwrap_or(false) {}
+        let changes_year = last_date.map(|d| d.year() != datum.year()).unwrap_or(false);
+        if changes_year {
+            w.divider(devider);
+            devider = '-';
+
+            let date = Date::from_ymd_opt(datum.year(), 1, 1).unwrap();
+            w.write_split_fmt(
+                format_args!("Bestand am {date}:"),
+                f.bestand(bestand.stück, bestand.preis),
+            );
+        }
+        last_date = Some(datum);
 
         bestand = transaktion.bestand.clone();
         let steuer = &transaktion.steuern;
         steuern_gesamt += steuer;
 
-        w.devider(devider);
+        w.divider(devider);
         devider = '-';
         match transaktion.typ {
             TransactionKind::Kauf { stück, preis } => {
@@ -196,15 +210,17 @@ pub fn write_and_sum_report<W: Write>(
                 writeln!(w, "Verkauf am {datum}: {}", f.bestand(stück, preis)).unwrap();
                 print_steuern(w, &mut f, steuer);
                 w.write_split("Neuer Bestand:", f.bestand(bestand.stück, bestand.preis));
+                auszahlung_gesamt += stück * preis;
             }
             TransactionKind::Split { faktor } => {
                 writeln!(w, "Aktiensplit am {datum} mit Faktor {faktor}").unwrap();
                 w.write_split("Neuer Bestand:", f.bestand(bestand.stück, bestand.preis));
             }
-            TransactionKind::Dividende { brutto, auszahlung } => {
+            TransactionKind::Dividende { auszahlung, .. } => {
                 writeln!(w, "Dividendenzahlung am {datum}:").unwrap();
                 writeln!(w, "Auszahlung: {}", f.eur(auszahlung)).unwrap();
                 print_steuern(w, &mut f, steuer);
+                auszahlung_gesamt += auszahlung;
             }
             TransactionKind::Ausschüttung { brutto, melde_id } => {
                 if melde_id > 0 {
@@ -214,7 +230,10 @@ pub fn write_and_sum_report<W: Write>(
                 }
                 writeln!(w, "Auszahlung: {}", f.eur(brutto)).unwrap();
                 print_steuern(w, &mut f, steuer);
-                w.write_split("Neuer Bestand:", f.bestand(bestand.stück, bestand.preis));
+                if melde_id > 0 {
+                    w.write_split("Neuer Bestand:", f.bestand(bestand.stück, bestand.preis));
+                }
+                auszahlung_gesamt += brutto;
             }
             TransactionKind::Jahresmeldung { melde_id } => {
                 writeln!(w, "Jahresmeldung am {datum} (Id: {melde_id}):").unwrap();
@@ -224,19 +243,24 @@ pub fn write_and_sum_report<W: Write>(
         }
     }
 
-    w.devider('-');
+    w.divider('-');
     w.write_split_fmt(
         format_args!("Bestand am {date_end}:"),
         f.bestand(bestand.stück, bestand.preis),
     );
 
+    w.divider('=');
+    writeln!(w, "Summe:").unwrap();
+    print_steuern(w, &mut f, &steuern_gesamt);
+
     if print_sum {
-        w.devider('=');
-        writeln!(w, "Summe:").unwrap();
-        print_steuern(w, &mut f, &steuern_gesamt);
+        writeln!(w).unwrap();
+        w.write_split("Auszahlung gesamt:", f.eur(auszahlung_gesamt));
+        let nachzahlung = steuern_gesamt.nachzahlung();
+        w.write_split("Steuernachzahlung:", f.eur(nachzahlung));
     }
 
-    steuern_gesamt
+    (auszahlung_gesamt, steuern_gesamt)
 }
 
 pub fn print_steuern<W: Write>(w: &mut Writer<W>, f: &mut Formatter, steuer: &Steuern) {
@@ -318,7 +342,7 @@ typ: etf
 name: Foo
 isin: IE00B9CQXS71
 transaktionen:
-- kauf: [2020-01-01, 40, 30.23]
+- kauf: [2020-01-01, 10, 10]
         "#,
         )
         .unwrap();

@@ -1,0 +1,5 @@
+typ: etf
+isin: IE00B8GKDB10
+name: ftse world high Dividend
+transaktionen:
+  - kauf: [2020-01-01, 100, 100]
