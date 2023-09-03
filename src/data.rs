@@ -32,8 +32,9 @@ pub enum TransactionKind {
     Kauf { stück: Number, preis: Number },
     Verkauf { stück: Number, preis: Number },
     Split { faktor: Number },
-    Dividende { brutto: Number, ertrag: Number },
-    Ausschüttung { brutto: Number },
+    Dividende { brutto: Number, auszahlung: Number },
+    Ausschüttung { brutto: Number, melde_id: usize },
+    Jahresmeldung { melde_id: usize },
 }
 
 #[derive(Debug, Clone, Default)]
@@ -50,9 +51,25 @@ impl Bestand {
 
 #[derive(Debug, Default)]
 pub struct Steuern {
-    pub erlös: Number,
-    pub gewinn: Number,
-    pub anrechenbare_quellensteuer: Number,
+    pub dividendenerträge_863: Number,
+    pub wertsteigerungen_994: Number,
+    pub wertverluste_892: Number,
+    pub ausschüttungen_898: Number,
+    pub ausschüttungsgleiche_erträge_937: Number,
+    pub gezahlte_kest_899: Number,
+    pub anrechenbare_quellensteuer_998: Number,
+}
+
+impl std::ops::AddAssign<&Self> for Steuern {
+    fn add_assign(&mut self, rhs: &Self) {
+        self.dividendenerträge_863 += rhs.dividendenerträge_863;
+        self.wertsteigerungen_994 += rhs.wertsteigerungen_994;
+        self.wertverluste_892 += rhs.wertverluste_892;
+        self.ausschüttungen_898 += rhs.ausschüttungen_898;
+        self.ausschüttungsgleiche_erträge_937 += rhs.ausschüttungsgleiche_erträge_937;
+        self.gezahlte_kest_899 += rhs.gezahlte_kest_899;
+        self.anrechenbare_quellensteuer_998 += rhs.anrechenbare_quellensteuer_998;
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -90,13 +107,19 @@ impl From<RawTransaction> for Transaction {
             },
             RawTransaction::Dividende(datum, brutto, ertrag) => Self {
                 datum,
-                typ: TransactionKind::Dividende { brutto, ertrag },
+                typ: TransactionKind::Dividende {
+                    brutto,
+                    auszahlung: ertrag,
+                },
                 bestand,
                 steuern,
             },
             RawTransaction::Ausschüttung(datum, brutto) => Self {
                 datum,
-                typ: TransactionKind::Ausschüttung { brutto },
+                typ: TransactionKind::Ausschüttung {
+                    brutto,
+                    melde_id: 0,
+                },
                 bestand,
                 steuern,
             },

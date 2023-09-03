@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
+
+use crate::data::{Date, Number};
 
 const OEKB_LIST_BASE: &str = "https://my.oekb.at/fond-info/rest/public/steuerMeldung/isin";
 const OEKB_REPORT_BASE: &str = "https://my.oekb.at/fond-info/rest/public/steuerMeldung/stmId";
@@ -25,7 +27,11 @@ mod raw {
         #[serde(rename = "isinBez")]
         pub name: String,
         #[serde(rename = "zufluss")]
-        pub date: String,
+        pub zufluss: String,
+        #[serde(rename = "zuflussFmv")] // für korrigierende Meldungen
+        pub zufluss_korrigiert: Option<String>,
+        #[serde(rename = "gueltBis")] // für korrigierte Meldungen
+        pub gültig_bis: Option<String>,
         #[serde(rename = "waehrung")]
         pub currency: String,
         #[serde(rename = "jahresdatenmeldung")]
@@ -56,125 +62,160 @@ pub struct Report {
 #[allow(non_snake_case)]
 #[derive(Debug, Default)]
 pub struct ReportRow {
-    pub date: String,
+    pub date: Date,
     pub report_id: usize,
     pub currency: String,
+    pub is_yearly_report: bool,
+    // details to be filled in later:
     pub rate: f64,
-    pub yearly_report: String,
     pub StB_E1KV_Ausschuettungen: f64,
     pub StB_E1KV_AGErtraege: f64,
     pub StB_E1KV_anzurechnende_ausl_Quellensteuer: f64,
     pub StB_E1KV_Korrekturbetrag_saldiert: f64,
 }
 
-pub async fn fetch_reports(isin: &str) -> Result<Report> {
-    let client = reqwest::Client::new();
+pub struct Scraper {
+    client: reqwest::Client,
+    usd_rates: BTreeMap<Date, Number>,
+}
 
-    let list_url = format!("{OEKB_LIST_BASE}/{isin}");
-    // dbg!(&list_url);
-    let list = client
-        .get(list_url)
-        .header(CONTEXT_HEADER_NAME, CONTEXT_HEADER_VALUE)
-        .send()
-        .await?;
+impl Scraper {
+    pub fn new() -> Self {
+        let client = reqwest::Client::new();
+        let usd_rates = Default::default();
 
-    let list: raw::FondInfo = list.json().await?;
+        Self { client, usd_rates }
+    }
 
-    let mut name = String::new();
-    let mut rows = Vec::with_capacity(list.list.len());
+    async fn get_currency_rate(&mut self, currency: &str, date: Date) -> f64 {
+        match currency {
+            "EUR" => return 1.0,
+            "USD" => {}
+            _ => {
+                panic!("Currency {currency} not supported")
+            }
+        }
+        if self.usd_rates.is_empty() {
+            self.usd_rates = self.fetch_usd_rates().await.unwrap();
+        }
+        self.usd_rates.get(&date).copied().unwrap_or(1.0)
+    }
 
-    let mut rates: BTreeMap<String, f64> = Default::default();
+    async fn fetch_usd_rates(&self) -> Result<BTreeMap<Date, f64>> {
+        let doc = self.client.get(ECB_USD).send().await?;
+        let doc = doc.text().await?;
 
-    for info in list.list {
-        // dbg!(&info);
+        let mut rates = BTreeMap::new();
 
-        let (date, _rest) = info
-            .date
-            .split_once('T')
-            .context("should be a ISO8601 datetime")?;
-
-        if date < "2020-01-01" {
-            continue;
+        for line in doc.lines() {
+            // <Obs TIME_PERIOD="2023-09-01" OBS_VALUE="1.0844" OBS_STATUS="A" OBS_CONF="F"/>
+            let Some(line) = line.trim_start().strip_prefix("<Obs TIME_PERIOD=\"") else {
+                continue;
+            };
+            let Some((date, rest)) = line.split_once("\" OBS_VALUE=\"") else {
+                continue;
+            };
+            let Some((rate, _rest)) = rest.split_once("\" OBS") else {
+                continue;
+            };
+            let date: Date = date.parse()?;
+            let rate: f64 = rate.parse()?;
+            rates.insert(date, rate);
         }
 
-        let rate = match info.currency.as_str() {
-            "EUR" => 1.0,
-            "USD" => {
-                if rates.is_empty() {
-                    rates = fetch_usd_rates().await?;
-                    // dbg!(&rates);
-                }
-                rates.get(date).copied().unwrap_or(1.0)
-            }
-            currency => anyhow::bail!("currency `{currency}` not supported"),
-        };
+        Ok(rates)
+    }
 
-        let report_url = format!("{OEKB_REPORT_BASE}/{}/privatAnl", info.report_id);
-        // dbg!(&report_url);
-
-        let report = client
-            .get(report_url)
+    pub async fn fetch_reports(&self, isin: &str) -> Result<Report> {
+        let list_url = format!("{OEKB_LIST_BASE}/{isin}");
+        let list = self
+            .client
+            .get(list_url)
             .header(CONTEXT_HEADER_NAME, CONTEXT_HEADER_VALUE)
             .send()
             .await?;
-        let report: raw::Report = report.json().await?;
 
-        let mut row = ReportRow {
-            report_id: info.report_id,
-            date: date.into(),
-            currency: info.currency,
-            rate,
-            yearly_report: info.yearly_report,
-            ..Default::default()
-        };
+        let list: raw::FondInfo = list.json().await?;
 
-        for raw_row in report.list {
-            // dbg!(&raw_row);
+        let mut name = String::new();
+        let mut rows = Vec::with_capacity(list.list.len());
 
+        for info in list.list {
+            // Meldung wurde von einer anderen Meldung korrigiert?
+            if info.gültig_bis.is_some() {
+                continue;
+            }
+            let date = info.zufluss_korrigiert.unwrap_or(info.zufluss);
+            let (date, _rest) = date.split_once('T').unwrap_or((&date, ""));
+            let date: Date = date.parse()?;
+
+            let row = ReportRow {
+                report_id: info.report_id,
+                date,
+                currency: info.currency,
+                is_yearly_report: info.yearly_report == "JA",
+                ..Default::default()
+            };
+            name = info.name;
+            rows.push(row);
+        }
+
+        rows.sort_by_key(|r| r.date);
+
+        Ok(Report {
+            isin: isin.into(),
+            name,
+            rows,
+        })
+    }
+
+    pub async fn fetch_report_details(&mut self, report: &mut ReportRow) -> Result<()> {
+        let details_url = format!("{OEKB_REPORT_BASE}/{}/privatAnl", report.report_id);
+        let raw_details = self
+            .client
+            .get(details_url)
+            .header(CONTEXT_HEADER_NAME, CONTEXT_HEADER_VALUE)
+            .send()
+            .await?;
+        let raw_details: raw::Report = raw_details.json().await?;
+
+        report.rate = self.get_currency_rate(&report.currency, report.date).await;
+
+        for raw_row in raw_details.list {
             match raw_row.key.as_str() {
-                "StB_E1KV_Ausschuettungen" => row.StB_E1KV_Ausschuettungen = raw_row.value,
-                "StB_E1KV_AGErtraege" => row.StB_E1KV_AGErtraege = raw_row.value,
+                "StB_E1KV_Ausschuettungen" => report.StB_E1KV_Ausschuettungen = raw_row.value,
+                "StB_E1KV_AGErtraege" => report.StB_E1KV_AGErtraege = raw_row.value,
                 "StB_E1KV_anzurechnende_ausl_Quellensteuer" => {
-                    row.StB_E1KV_anzurechnende_ausl_Quellensteuer = raw_row.value
+                    report.StB_E1KV_anzurechnende_ausl_Quellensteuer = raw_row.value
                 }
                 "StB_E1KV_Korrekturbetrag_saldiert" => {
-                    row.StB_E1KV_Korrekturbetrag_saldiert = raw_row.value
+                    report.StB_E1KV_Korrekturbetrag_saldiert = raw_row.value
                 }
                 _ => {}
             }
         }
 
-        name = info.name;
-        rows.push(row);
-    }
+        // TODO: fetch AIF?
 
-    Ok(Report {
-        isin: isin.into(),
-        name,
-        rows,
-    })
+        Ok(())
+    }
 }
 
-pub async fn fetch_usd_rates() -> Result<BTreeMap<String, f64>> {
-    let doc = reqwest::get(ECB_USD).await?;
-    let doc = doc.text().await?;
-
-    let mut rates = BTreeMap::new();
-
-    for line in doc.lines() {
-        // <Obs TIME_PERIOD="2023-09-01" OBS_VALUE="1.0844" OBS_STATUS="A" OBS_CONF="F"/>
-        let Some(line) = line.trim_start().strip_prefix("<Obs TIME_PERIOD=\"") else {
-            continue;
-        };
-        let Some((date, rest)) = line.split_once("\" OBS_VALUE=\"") else {
-            continue;
-        };
-        let Some((rate, _rest)) = rest.split_once("\" OBS") else {
-            continue;
-        };
-        let rate: f64 = rate.parse()?;
-        rates.insert(date.into(), rate);
+impl Default for Scraper {
+    fn default() -> Self {
+        Self::new()
     }
+}
 
-    Ok(rates)
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_korrigierter_report() {
+        let scraper = Scraper::new();
+
+        let report = scraper.fetch_reports("IE00B9CQXS71").await.unwrap();
+        dbg!(report);
+    }
 }
