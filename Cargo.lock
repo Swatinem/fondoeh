@@ -219,7 +219,6 @@ dependencies = [
  "serde_yaml",
  "tokio",
  "writeable",
- "zerovec",
 ]
 
 [[package]]
