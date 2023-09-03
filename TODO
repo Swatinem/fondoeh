@@ -1,3 +1,2 @@
 - Eine Decimal oder Fractional crate finden :-)
-- Schöne Formatierung :-)
-- Reports pro Jahr, gesamt, etc…
+- Besseres Error Handling, aka weniger `unwrap`
