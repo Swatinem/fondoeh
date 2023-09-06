@@ -340,7 +340,7 @@ transaktionen:
         )
         .unwrap();
         let mut scraper = Scraper::new();
-        do_taxes(&mut scraper, &mut security).await;
+        do_taxes(&mut scraper, &mut security, 2023).await;
 
         let mut writer = Writer::new(String::new());
         let sum = write_and_sum_report(&mut writer, &security, Some(2023), true);
@@ -361,7 +361,7 @@ transaktionen:
         )
         .unwrap();
         let mut scraper = Scraper::new();
-        do_taxes(&mut scraper, &mut security).await;
+        do_taxes(&mut scraper, &mut security, 2023).await;
 
         let mut writer = Writer::new(String::new());
         let sum = write_and_sum_report(&mut writer, &security, None, true);

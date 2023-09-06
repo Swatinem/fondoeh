@@ -14,6 +14,27 @@ pub struct Security {
     pub name: String,
     pub isin: String,
     pub transaktionen: Vec<Transaction>,
+    #[serde(skip)]
+    pub jahre: Jahre,
+}
+
+#[derive(Debug, Default)]
+pub struct Jahre {
+    pub jahre: Vec<Jahr>,
+}
+
+impl Jahre {
+    pub fn get(&self, jahr: i32) -> Option<&Jahr> {
+        self.jahre.iter().find(|j| j.jahr == jahr)
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct Jahr {
+    pub jahr: i32,
+    pub bestand_anfang: Bestand,
+    pub bestand_ende: Bestand,
+    pub transaktionen: Vec<Transaction>,
 }
 
 #[derive(Debug, Deserialize)]

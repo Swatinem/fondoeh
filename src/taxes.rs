@@ -1,11 +1,13 @@
-use chrono::Days;
+use chrono::{Datelike, Days};
 
-use crate::data::{Bestand, Security, SecurityType, Steuern, Transaction, TransactionKind};
+use crate::data::{
+    Bestand, Jahr, Jahre, Security, SecurityType, Steuern, Transaction, TransactionKind,
+};
 use crate::scraper::{ReportRow, Scraper};
 
 const MELDUNG_DATUM_ABWEICHUNG: Days = Days::new(7);
 
-pub async fn do_taxes(scraper: &mut Scraper, security: &mut Security) {
+pub async fn do_taxes(scraper: &mut Scraper, security: &mut Security, jahr: i32) {
     // transaktionen sortieren
     security.transaktionen.sort_by_key(|t| t.datum);
 
@@ -23,6 +25,7 @@ pub async fn do_taxes(scraper: &mut Scraper, security: &mut Security) {
 
     // von hinten nach vorne:
 
+    let jahre = &mut security.jahre;
     let transaktionen = std::mem::take(&mut security.transaktionen);
     let mut transaktionen = transaktionen.into_iter().peekable();
 
@@ -57,7 +60,7 @@ pub async fn do_taxes(scraper: &mut Scraper, security: &mut Security) {
                     let mut steuern = Steuern::default();
                     steuern_für_meldung(&mut bestand, &mut steuern, next_meldung);
 
-                    security.transaktionen.push(Transaction {
+                    jahre.push_transaktion(Transaction {
                         datum: next_meldung.date,
                         typ: TransactionKind::Jahresmeldung {
                             melde_id: next_meldung.report_id,
@@ -167,7 +170,53 @@ pub async fn do_taxes(scraper: &mut Scraper, security: &mut Security) {
         }
         transaktion.bestand = bestand.clone();
 
-        security.transaktionen.push(transaktion);
+        jahre.push_transaktion(transaktion);
+    }
+
+    jahre.finish(jahr)
+}
+
+impl Jahre {
+    pub fn push_transaktion(&mut self, transaktion: Transaction) {
+        let jahr = transaktion.datum.year();
+        let jahr = if let Some(letztes_jahr) = self.jahre.last_mut() {
+            if letztes_jahr.jahr < jahr {
+                let bestand = letztes_jahr.bestand_ende.clone();
+                self.jahre.push(Jahr {
+                    jahr,
+                    bestand_anfang: bestand,
+                    ..Default::default()
+                });
+                self.jahre.last_mut().unwrap()
+            } else {
+                letztes_jahr
+            }
+        } else {
+            self.jahre.push(Jahr {
+                jahr,
+                ..Default::default()
+            });
+            self.jahre.last_mut().unwrap()
+        };
+        jahr.bestand_ende = transaktion.bestand.clone();
+        jahr.transaktionen.push(transaktion);
+    }
+
+    pub fn finish(&mut self, jahr: i32) {
+        if let Some(letztes_jahr) = self.jahre.last() {
+            if letztes_jahr.bestand_ende.stück <= 0.0 || letztes_jahr.jahr >= jahr {
+                return; // nichts zu tun
+            }
+            let bestand = letztes_jahr.bestand_ende.clone();
+            for jahr in letztes_jahr.jahr..=jahr {
+                self.jahre.push(Jahr {
+                    jahr,
+                    bestand_anfang: bestand.clone(),
+                    bestand_ende: bestand.clone(),
+                    transaktionen: vec![],
+                })
+            }
+        }
     }
 }
 
@@ -199,7 +248,7 @@ transaktionen:
         )
         .unwrap();
         let mut scraper = Scraper::new();
-        do_taxes(&mut scraper, &mut security).await;
+        do_taxes(&mut scraper, &mut security, 2023).await;
         dbg!(security);
     }
 }
