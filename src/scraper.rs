@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use anyhow::Result;
 
-use crate::data::{Date, Number};
+use crate::{Datum, Zahl};
 
 const OEKB_LIST_BASE: &str = "https://my.oekb.at/fond-info/rest/public/steuerMeldung/isin";
 const OEKB_REPORT_BASE: &str = "https://my.oekb.at/fond-info/rest/public/steuerMeldung/stmId";
@@ -15,6 +15,9 @@ const CONTEXT_HEADER_VALUE: &str =
 const ECB_USD: &str = "https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/usd.xml";
 
 mod raw {
+    use super::*;
+    use crate::format;
+
     #[derive(Debug, serde::Deserialize)]
     pub struct FondInfo {
         pub list: Vec<FondInfoRow>,
@@ -23,15 +26,15 @@ mod raw {
     #[derive(Debug, serde::Deserialize)]
     pub struct FondInfoRow {
         #[serde(rename = "stmId")]
-        pub report_id: usize,
+        pub report_id: u32,
         #[serde(rename = "isinBez")]
         pub name: String,
         #[serde(rename = "zufluss")]
-        pub zufluss: String,
+        pub zufluss: Datum,
         #[serde(rename = "zuflussFmv")] // für korrigierende Meldungen
-        pub zufluss_korrigiert: Option<String>,
+        pub zufluss_korrigiert: Option<Datum>,
         #[serde(rename = "gueltBis")] // für korrigierte Meldungen
-        pub gültig_bis: Option<String>,
+        pub gültig_bis: Option<Datum>,
         #[serde(rename = "waehrung")]
         pub currency: String,
         #[serde(rename = "jahresdatenmeldung")]
@@ -48,7 +51,7 @@ mod raw {
         #[serde(rename = "steuerName")]
         pub key: String,
         #[serde(rename = "pvMitOption4")]
-        pub value: f64,
+        pub value: format::Zahl,
     }
 }
 
@@ -62,21 +65,21 @@ pub struct Report {
 #[allow(non_snake_case)]
 #[derive(Debug, Default)]
 pub struct ReportRow {
-    pub date: Date,
-    pub report_id: usize,
+    pub date: Datum,
+    pub report_id: u32,
     pub currency: String,
     pub is_yearly_report: bool,
-    // details to be filled in later:
-    pub rate: f64,
-    pub StB_E1KV_Ausschuettungen: f64,
-    pub StB_E1KV_AGErtraege: f64,
-    pub StB_E1KV_anzurechnende_ausl_Quellensteuer: f64,
-    pub StB_E1KV_Korrekturbetrag_saldiert: f64,
+    pub rate: Zahl,
+    pub StB_E1KV_Ausschuettungen: Zahl,
+    pub StB_E1KV_AGErtraege: Zahl,
+    pub StB_E1KV_anzurechnende_ausl_Quellensteuer: Zahl,
+    pub StB_E1KV_Korrekturbetrag_saldiert: Zahl,
 }
 
+#[derive(Debug)]
 pub struct Scraper {
     client: reqwest::Client,
-    usd_rates: BTreeMap<Date, Number>,
+    usd_rates: BTreeMap<Datum, Zahl>,
 }
 
 impl Scraper {
@@ -87,9 +90,9 @@ impl Scraper {
         Self { client, usd_rates }
     }
 
-    async fn get_currency_rate(&mut self, currency: &str, date: Date) -> f64 {
+    async fn get_currency_rate(&mut self, currency: &str, date: Datum) -> Zahl {
         match currency {
-            "EUR" => return 1.0,
+            "EUR" => return 1.into(),
             "USD" => {}
             _ => {
                 panic!("Currency {currency} not supported")
@@ -98,10 +101,10 @@ impl Scraper {
         if self.usd_rates.is_empty() {
             self.usd_rates = self.fetch_usd_rates().await.unwrap();
         }
-        self.usd_rates.get(&date).copied().unwrap_or(1.0)
+        self.usd_rates.get(&date).copied().unwrap_or(1.into())
     }
 
-    async fn fetch_usd_rates(&self) -> Result<BTreeMap<Date, f64>> {
+    async fn fetch_usd_rates(&self) -> Result<BTreeMap<Datum, Zahl>> {
         let doc = self.client.get(ECB_USD).send().await?;
         let doc = doc.text().await?;
 
@@ -118,8 +121,8 @@ impl Scraper {
             let Some((rate, _rest)) = rest.split_once("\" OBS") else {
                 continue;
             };
-            let date: Date = date.parse()?;
-            let rate: f64 = rate.parse()?;
+            let date: Datum = date.parse()?;
+            let rate: Zahl = rate.parse()?;
             rates.insert(date, rate);
         }
 
@@ -146,8 +149,6 @@ impl Scraper {
                 continue;
             }
             let date = info.zufluss_korrigiert.unwrap_or(info.zufluss);
-            let (date, _rest) = date.split_once('T').unwrap_or((&date, ""));
-            let date: Date = date.parse()?;
 
             let row = ReportRow {
                 report_id: info.report_id,
@@ -183,13 +184,13 @@ impl Scraper {
 
         for raw_row in raw_details.list {
             match raw_row.key.as_str() {
-                "StB_E1KV_Ausschuettungen" => report.StB_E1KV_Ausschuettungen = raw_row.value,
-                "StB_E1KV_AGErtraege" => report.StB_E1KV_AGErtraege = raw_row.value,
+                "StB_E1KV_Ausschuettungen" => report.StB_E1KV_Ausschuettungen = raw_row.value.0,
+                "StB_E1KV_AGErtraege" => report.StB_E1KV_AGErtraege = raw_row.value.0,
                 "StB_E1KV_anzurechnende_ausl_Quellensteuer" => {
-                    report.StB_E1KV_anzurechnende_ausl_Quellensteuer = raw_row.value
+                    report.StB_E1KV_anzurechnende_ausl_Quellensteuer = raw_row.value.0
                 }
                 "StB_E1KV_Korrekturbetrag_saldiert" => {
-                    report.StB_E1KV_Korrekturbetrag_saldiert = raw_row.value
+                    report.StB_E1KV_Korrekturbetrag_saldiert = raw_row.value.0
                 }
                 _ => {}
             }

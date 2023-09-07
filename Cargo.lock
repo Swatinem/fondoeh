@@ -214,6 +214,7 @@ dependencies = [
  "icu_provider",
  "icu_provider_adapters",
  "num-rational",
+ "num-traits",
  "reqwest",
  "serde",
  "serde_json",

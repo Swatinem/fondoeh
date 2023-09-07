@@ -63,7 +63,7 @@ pub async fn do_taxes(scraper: &mut Scraper, security: &mut Security, jahr: i32)
                     jahre.push_transaktion(Transaction {
                         datum: next_meldung.date,
                         typ: TransactionKind::Jahresmeldung {
-                            melde_id: next_meldung.report_id,
+                            melde_id: next_meldung.report_id as usize,
                         },
                         bestand: bestand.clone(),
                         steuern,
@@ -156,7 +156,7 @@ pub async fn do_taxes(scraper: &mut Scraper, security: &mut Security, jahr: i32)
 
                 if let Some(meldung) = meldung.take() {
                     // ausschüttung mit meldung
-                    *melde_id = meldung.report_id;
+                    *melde_id = meldung.report_id as usize;
                     // wir nutzen hier das datum der meldung
                     // die tatsächliche auszahlung kann wegen wochenende usw verzögert sein
                     transaktion.datum = meldung.date;
