@@ -14,6 +14,7 @@ use taxes::do_taxes;
 use crate::data::Transaction;
 
 pub mod data;
+pub mod deser;
 pub mod report;
 pub mod scraper;
 pub mod taxes;
