@@ -1,7 +1,9 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
+use crate::format;
 use crate::{Datum, Zahl};
 
 const OEKB_LIST_BASE: &str = "https://my.oekb.at/fond-info/rest/public/steuerMeldung/isin";
@@ -16,7 +18,8 @@ const ECB_USD: &str = "https://www.ecb.europa.eu/stats/policy_and_exchange_rates
 
 mod raw {
     use super::*;
-    use crate::format;
+
+    use serde_json::value::RawValue;
 
     #[derive(Debug, serde::Deserialize)]
     pub struct FondMeldungen {
@@ -30,11 +33,11 @@ mod raw {
         #[serde(rename = "isinBez")]
         pub name: String,
         #[serde(rename = "zufluss")]
-        pub zufluss: Datum,
+        pub zufluss: String,
         #[serde(rename = "zuflussFmv")] // für korrigierende Meldungen
-        pub zufluss_korrigiert: Option<Datum>,
+        pub zufluss_korrigiert: Option<String>,
         #[serde(rename = "gueltBis")] // für korrigierte Meldungen
-        pub gültig_bis: Option<Datum>,
+        pub gültig_bis: Option<String>,
         #[serde(rename = "waehrung")]
         pub währung: String,
         #[serde(rename = "jahresdatenmeldung")]
@@ -51,7 +54,21 @@ mod raw {
         #[serde(rename = "steuerName")]
         pub key: String,
         #[serde(rename = "pvMitOption4")]
-        pub value: format::Zahl,
+        pub value: RawZahl,
+    }
+
+    #[derive(Debug, serde::Deserialize)]
+    #[serde(try_from = "&RawValue")]
+    pub struct RawZahl(pub Zahl);
+
+    impl TryFrom<&RawValue> for RawZahl {
+        type Error = anyhow::Error;
+
+        fn try_from(value: &RawValue) -> Result<Self, Self::Error> {
+            let raw = Cow::Borrowed(value.get());
+            let zahl = format::Zahl::try_from(raw)?;
+            Ok(Self(zahl.0))
+        }
     }
 }
 
@@ -90,18 +107,18 @@ impl Scraper {
         Self { client, usd_kurse }
     }
 
-    async fn get_währungs_kurs(&mut self, währung: &str, datum: Datum) -> Zahl {
+    async fn get_währungs_kurs(&mut self, währung: &str, datum: Datum) -> Result<Zahl> {
         match währung {
-            "EUR" => return 1.into(),
+            "EUR" => return Ok(1.into()),
             "USD" => {}
             _ => {
                 panic!("Currency {währung} not supported")
             }
         }
         if self.usd_kurse.is_empty() {
-            self.usd_kurse = self.fetch_usd_kurse().await.unwrap();
+            self.usd_kurse = self.fetch_usd_kurse().await?;
         }
-        self.usd_kurse.get(&datum).copied().unwrap_or(1.into())
+        Ok(self.usd_kurse.get(&datum).copied().unwrap_or(1.into()))
     }
 
     async fn fetch_usd_kurse(&self) -> Result<BTreeMap<Datum, Zahl>> {
@@ -122,7 +139,7 @@ impl Scraper {
                 continue;
             };
             let date: Datum = date.parse()?;
-            let rate: Zahl = rate.parse()?;
+            let rate: Zahl = format::Zahl::try_from(Cow::Borrowed(rate))?.0;
             rates.insert(date, rate);
         }
 
@@ -137,8 +154,9 @@ impl Scraper {
             .header(CONTEXT_HEADER_NAME, CONTEXT_HEADER_VALUE)
             .send()
             .await?;
-
-        let list: raw::FondMeldungen = list.json().await?;
+        // let text = list.text().await?;
+        // println!("{text}");
+        let list: raw::FondMeldungen = list.json().await.context("Meldungen einlesen")?;
 
         let mut name = String::new();
         let mut meldungen = Vec::with_capacity(list.list.len());
@@ -149,6 +167,8 @@ impl Scraper {
                 continue;
             }
             let datum = info.zufluss_korrigiert.unwrap_or(info.zufluss);
+            let (datum, _rest) = datum.split_once('T').unwrap_or((&datum, ""));
+            let datum = datum.parse()?;
 
             let row = FondMeldung {
                 melde_id: info.melde_id,
@@ -178,9 +198,17 @@ impl Scraper {
             .header(CONTEXT_HEADER_NAME, CONTEXT_HEADER_VALUE)
             .send()
             .await?;
-        let raw_details: raw::Meldungsdetails = raw_details.json().await?;
+        // let text = raw_details.text().await?;
+        // println!("{text}");
+        // serde_json::from_str(&text)
+        let raw_details: raw::Meldungsdetails = raw_details
+            .json()
+            .await
+            .context("Meldungsdetails einlesen")?;
 
-        report.währungskurs = self.get_währungs_kurs(&report.währung, report.datum).await;
+        report.währungskurs = self
+            .get_währungs_kurs(&report.währung, report.datum)
+            .await?;
 
         for raw_row in raw_details.list {
             match raw_row.key.as_str() {
@@ -214,9 +242,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_korrigierter_report() {
-        let scraper = Scraper::new();
+        let mut scraper = Scraper::new();
 
-        let report = scraper.fetch_meldungen("IE00B9CQXS71").await.unwrap();
-        dbg!(report);
+        let mut report = scraper.fetch_meldungen("IE00B9CQXS71").await.unwrap();
+        dbg!(&report);
+
+        let meldung = &mut report.meldungen[0];
+        scraper.fetch_meldungs_details(meldung).await.unwrap();
+        dbg!(meldung);
     }
 }
