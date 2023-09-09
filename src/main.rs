@@ -1,194 +1,124 @@
-extern crate alloc; // because of `BakedDataProvider`
-
-use std::fmt::Write;
-use std::fs::File;
+use std::collections::HashMap;
+use std::fs;
+use std::io::Write;
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use chrono::Datelike;
+use clap::Parser;
+use globset::GlobBuilder;
+use walkdir::WalkDir;
 
-use data::{Date, Steuern, TransactionKind};
-use report::{print_steuern, write_and_sum_report, Formatter, Writer, WIDTH};
-use scraper::Scraper;
-use taxes::do_taxes;
-
-use crate::data::Transaction;
-
-pub mod data;
-pub mod report;
-pub mod scraper;
-pub mod taxes;
-
+use berechnung::Rechner;
 use fondoeh::*;
+use report::BREITE;
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Pfad zu den Daten
+    daten: Vec<PathBuf>,
+
+    /// TSV Ausgabe aktivieren
+    #[arg(short, long)]
+    tsv: bool,
+
+    /// Für welches Jahr die Berechnung erfolgen soll
+    #[arg(short, long)]
+    jahr: Option<i32>,
+}
 
 #[tokio::main]
-async fn main() -> Result<()> {
-    let mut args = std::env::args().skip(1);
-    let dir = args.next().context("needs directory")?;
+async fn main() -> anyhow::Result<()> {
+    let args = Args::parse();
 
-    let mut scraper = Scraper::new();
-    let mut reports = vec![];
-    let mut auszahlung_gesamt = 0.0;
-    let mut steuer_gesamt = Steuern::default();
+    let gefundene_daten = finde_alle_daten(args.daten)?;
 
-    let heute = chrono::Local::now().date_naive();
+    let mut rechner = Rechner::new();
 
-    let year = if let Some(year) = args.next() {
-        Some(year.parse()?)
-    } else {
-        None
-    };
-    let files = glob::glob(&format!("{dir}/**/*.yaml"))?;
-    for file in files {
-        let file = file?;
-        let rdr = File::open(&file)?;
-
-        let mut security =
-            serde_yaml::from_reader(rdr).context(format!("failed parsing {}", file.display()))?;
-
-        do_taxes(&mut scraper, &mut security, heute.year()).await;
-
-        let mut writer = Writer::new(String::new());
-        if let Some(summe) = write_and_sum_report(&mut writer, &security, year, false) {
-            auszahlung_gesamt += summe.0;
-            steuer_gesamt += &summe.1;
-        };
-
-        let s = writer.into_inner();
-
-        reports.push((security, s));
+    let mut wertpapiere = Vec::with_capacity(gefundene_daten.len());
+    for (pfad, wertpapier) in gefundene_daten {
+        let context = format!("Auswertung von `{}` ({})", wertpapier.name, pfad.display());
+        let wertpapier = rechner
+            .wertpapier_auswerten(wertpapier)
+            .await
+            .context(context)?;
+        wertpapiere.push(wertpapier);
     }
 
-    reports.sort_by(|a, b| (&a.0.typ, &a.0.isin).cmp(&(&b.0.typ, &b.0.isin)));
+    wertpapiere.sort_by(|a, b| (&a.typ, &a.name).cmp(&(&b.typ, &b.name)));
+    // dbg!(&wertpapiere);
 
-    let mut f = Formatter::new();
+    let mut w = std::io::stdout().lock();
+    if args.tsv {
+        write!(w, "{}", tsv::TsvTitel)?;
+    }
 
-    print!("Name\tISIN\tArt\tDatum\tBestand\tDurchschnittspreis\t"); // 6
-    print!("Aktion\tStück\tPreis\tBrutto\tAuszahlung\tÜberschuss (994)\tVerlust (892)\t"); // 7
-    print!("Dividendenertrag (863)\tGezahlte KeSt (899)\tAnrechenbare Quellensteuer (998)\t"); // 3
-    println!("Ausschüttung (898)\tAusschüttungsgl Ertrag (937)\tMelde-ID"); // 3
+    let mut wertpapiere = wertpapiere.iter().peekable();
 
-    for (security, _) in reports {
-        let jahr = 2022;
-        // dbg!(jahr, &security);
-
-        let Some(daten_jahr) = security.jahre.get(jahr) else {
+    while let Some(wertpapier) = wertpapiere.next() {
+        let mut jahre = wertpapier.iter_jahre(args.jahr).peekable();
+        if jahre.peek().is_none() {
             continue;
         };
-        // dbg!(daten_jahr);
-        let erster = Date::from_ymd_opt(jahr, 1, 1).unwrap();
-        let bestand = &daten_jahr.bestand_anfang;
-        println!(
-            "{}\t{}\t{:?}\t{}\t{}\t{}\tBestand",
-            security.name,
-            security.isin,
-            security.typ,
-            erster,
-            bestand.stück,
-            f.eur(bestand.preis),
-        );
 
-        for transaktion in &daten_jahr.transaktionen {
-            let Transaction {
-                bestand, steuern, ..
-            } = transaktion;
-            print!(
-                "{}\t{}\t{:?}\t{}\t{}\t{}\t",
-                security.name,
-                security.isin,
-                security.typ,
-                transaktion.datum,
-                bestand.stück,
-                f.eur(bestand.preis),
-            );
-            match transaktion.typ {
-                TransactionKind::Kauf { stück, preis } => println!("Kauf\t{}\t{}", stück, preis),
-                TransactionKind::Verkauf { stück, preis } => {
-                    println!(
-                        "Verkauf\t{}\t{}\t{}\t{}\t{}\t{}",
-                        stück,
-                        f.eur(preis).to_owned(),
-                        f.eur(stück * preis).to_owned(),
-                        f.eur(stück * preis).to_owned(),
-                        f.eur(steuern.wertsteigerungen_994).to_owned(),
-                        f.eur(steuern.wertverluste_892)
-                    )
-                }
-                TransactionKind::Split { faktor } => println!("Split\t{}", faktor),
-                TransactionKind::Dividende { brutto, auszahlung } => {
-                    println!(
-                        "Dividende\t\t\t{}\t{}\t\t\t{}\t{}\t{}",
-                        f.eur(brutto).to_owned(),
-                        f.eur(auszahlung).to_owned(),
-                        f.eur(steuern.dividendenerträge_863).to_owned(),
-                        f.eur(steuern.gezahlte_kest_899).to_owned(),
-                        f.eur(steuern.anrechenbare_quellensteuer_998)
-                    )
-                }
-                TransactionKind::Ausschüttung { brutto, melde_id } => {
-                    if melde_id == 0 {
-                        println!(
-                            "Ausschüttung ohne Meldung\t\t\t{}\t{}\t\t\t\t\t\t{}",
-                            f.eur(brutto).to_owned(),
-                            f.eur(brutto).to_owned(),
-                            f.eur(steuern.ausschüttungen_898)
-                        )
-                    } else {
-                        println!(
-                            "Ausschüttung mit Meldung\t\t\t{}\t{}\t\t\t\t\t{}\t{}\t{}\t{}",
-                            f.eur(brutto).to_owned(),
-                            f.eur(brutto).to_owned(),
-                            f.eur(steuern.anrechenbare_quellensteuer_998).to_owned(),
-                            f.eur(steuern.ausschüttungen_898).to_owned(),
-                            f.eur(steuern.ausschüttungsgleiche_erträge_937),
-                            melde_id
-                        )
-                    }
-                }
-                TransactionKind::Jahresmeldung { melde_id } => println!(
-                    "Jahresmeldung\t\t\t\t\t\t\t\t\t{}\t{}\t{}\t{}",
-                    f.eur(steuern.anrechenbare_quellensteuer_998).to_owned(),
-                    f.eur(steuern.ausschüttungen_898).to_owned(),
-                    f.eur(steuern.ausschüttungsgleiche_erträge_937),
-                    melde_id
-                ),
-            }
+        if !args.tsv {
+            write!(w, "{}", report::ReportTitel { wertpapier })?;
         }
 
-        let letzter = Date::from_ymd_opt(jahr, 12, 31).unwrap();
-        let bestand = &daten_jahr.bestand_ende;
-        println!(
-            "{}\t{}\t{:?}\t{}\t{}\t{}\tBestand",
-            security.name,
-            security.isin,
-            security.typ,
-            letzter,
-            bestand.stück,
-            f.eur(bestand.preis),
-        );
-    }
+        let mut letztes_jahr = None;
+        for jahr in jahre {
+            if args.tsv {
+                write!(w, "{}", tsv::TsvWertpapier { wertpapier, jahr })?;
+            } else {
+                write!(w, "{}", report::ReportJahr { jahr })?;
+            }
+            letztes_jahr = Some(jahr);
+        }
+        if !args.tsv {
+            let letztes_jahr = letztes_jahr.unwrap();
+            let datum = letztes_jahr.letzter().min(rechner.heute);
+            let bestand = report::ReportBestandAm {
+                datum,
+                bestand: letztes_jahr.bestand_ende,
+            };
+            write!(w, "{bestand}")?;
 
-    return Ok(());
-
-    let mut writer = Writer::new(String::new());
-    let w = &mut writer;
-    print_steuern(w, &mut f, &steuer_gesamt);
-    writeln!(w).unwrap();
-    w.write_split("Auszahlung gesamt:", f.eur(auszahlung_gesamt));
-    let nachzahlung = steuer_gesamt.nachzahlung();
-    w.write_split("Steuernachzahlung:", f.eur(nachzahlung));
-    // let ertrag = auszahlung_gesamt - nachzahlung;
-    // w.write_split("TODO: Ertrag effektiv", formatter.eur(ertrag));
-    // if year.is_some() {
-    //     w.write_split("Ertrag effektiv pro Monat", formatter.eur(ertrag / 12.));
-    // }
-
-    println!("{}", writer.into_inner());
-
-    for report in reports {
-        println!("{:#<WIDTH$}", "");
-        println!();
-        println!("{}", report.1);
+            if wertpapiere.peek().is_some() {
+                writeln!(w)?;
+                writeln!(w, "{:#<BREITE$}", "")?;
+                writeln!(w)?;
+            }
+        }
     }
 
     Ok(())
+}
+
+fn finde_alle_daten(daten: Vec<PathBuf>) -> Result<HashMap<PathBuf, format::Wertpapier>> {
+    let mut gefundene_daten = HashMap::new();
+
+    let glob = GlobBuilder::new("**/*.{yml,yaml}")
+        .case_insensitive(true)
+        .build()?
+        .compile_matcher();
+
+    for pfad in daten {
+        for entry in WalkDir::new(pfad) {
+            let entry = entry?;
+            let pfad = entry.path();
+            if glob.is_match(pfad) {
+                if gefundene_daten.contains_key(pfad) {
+                    continue;
+                }
+                let rdr = fs::File::open(pfad)
+                    .with_context(|| format!("Öffnen von `{}`", pfad.display()))?;
+                let wertpapier = serde_yaml::from_reader(rdr)
+                    .with_context(|| format!("Einlesen von `{}`", pfad.display()))?;
+
+                gefundene_daten.insert(entry.into_path(), wertpapier);
+            }
+        }
+    }
+
+    Ok(gefundene_daten)
 }

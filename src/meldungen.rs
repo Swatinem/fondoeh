@@ -19,14 +19,14 @@ mod raw {
     use crate::format;
 
     #[derive(Debug, serde::Deserialize)]
-    pub struct FondInfo {
-        pub list: Vec<FondInfoRow>,
+    pub struct FondMeldungen {
+        pub list: Vec<FondMeldung>,
     }
 
     #[derive(Debug, serde::Deserialize)]
-    pub struct FondInfoRow {
+    pub struct FondMeldung {
         #[serde(rename = "stmId")]
-        pub report_id: u32,
+        pub melde_id: u32,
         #[serde(rename = "isinBez")]
         pub name: String,
         #[serde(rename = "zufluss")]
@@ -36,18 +36,18 @@ mod raw {
         #[serde(rename = "gueltBis")] // für korrigierte Meldungen
         pub gültig_bis: Option<Datum>,
         #[serde(rename = "waehrung")]
-        pub currency: String,
+        pub währung: String,
         #[serde(rename = "jahresdatenmeldung")]
-        pub yearly_report: String,
+        pub ist_jahresmeldung: String,
     }
 
     #[derive(Debug, serde::Deserialize)]
-    pub struct Report {
-        pub list: Vec<ReportRow>,
+    pub struct Meldungsdetails {
+        pub list: Vec<Meldungsdetail>,
     }
 
     #[derive(Debug, serde::Deserialize)]
-    pub struct ReportRow {
+    pub struct Meldungsdetail {
         #[serde(rename = "steuerName")]
         pub key: String,
         #[serde(rename = "pvMitOption4")]
@@ -56,20 +56,20 @@ mod raw {
 }
 
 #[derive(Debug)]
-pub struct Report {
+pub struct FondMeldungen {
     pub isin: String,
     pub name: String,
-    pub rows: Vec<ReportRow>,
+    pub meldungen: Vec<FondMeldung>,
 }
 
 #[allow(non_snake_case)]
 #[derive(Debug, Default)]
-pub struct ReportRow {
-    pub date: Datum,
-    pub report_id: u32,
-    pub currency: String,
-    pub is_yearly_report: bool,
-    pub rate: Zahl,
+pub struct FondMeldung {
+    pub datum: Datum,
+    pub melde_id: u32,
+    pub ist_jahresmeldung: bool,
+    pub währung: String,
+    pub währungskurs: Zahl,
     pub StB_E1KV_Ausschuettungen: Zahl,
     pub StB_E1KV_AGErtraege: Zahl,
     pub StB_E1KV_anzurechnende_ausl_Quellensteuer: Zahl,
@@ -79,32 +79,32 @@ pub struct ReportRow {
 #[derive(Debug)]
 pub struct Scraper {
     client: reqwest::Client,
-    usd_rates: BTreeMap<Datum, Zahl>,
+    usd_kurse: BTreeMap<Datum, Zahl>,
 }
 
 impl Scraper {
     pub fn new() -> Self {
         let client = reqwest::Client::new();
-        let usd_rates = Default::default();
+        let usd_kurse = Default::default();
 
-        Self { client, usd_rates }
+        Self { client, usd_kurse }
     }
 
-    async fn get_currency_rate(&mut self, currency: &str, date: Datum) -> Zahl {
-        match currency {
+    async fn get_währungs_kurs(&mut self, währung: &str, datum: Datum) -> Zahl {
+        match währung {
             "EUR" => return 1.into(),
             "USD" => {}
             _ => {
-                panic!("Currency {currency} not supported")
+                panic!("Currency {währung} not supported")
             }
         }
-        if self.usd_rates.is_empty() {
-            self.usd_rates = self.fetch_usd_rates().await.unwrap();
+        if self.usd_kurse.is_empty() {
+            self.usd_kurse = self.fetch_usd_kurse().await.unwrap();
         }
-        self.usd_rates.get(&date).copied().unwrap_or(1.into())
+        self.usd_kurse.get(&datum).copied().unwrap_or(1.into())
     }
 
-    async fn fetch_usd_rates(&self) -> Result<BTreeMap<Datum, Zahl>> {
+    async fn fetch_usd_kurse(&self) -> Result<BTreeMap<Datum, Zahl>> {
         let doc = self.client.get(ECB_USD).send().await?;
         let doc = doc.text().await?;
 
@@ -129,7 +129,7 @@ impl Scraper {
         Ok(rates)
     }
 
-    pub async fn fetch_reports(&self, isin: &str) -> Result<Report> {
+    pub async fn fetch_meldungen(&self, isin: &str) -> Result<FondMeldungen> {
         let list_url = format!("{OEKB_LIST_BASE}/{isin}");
         let list = self
             .client
@@ -138,49 +138,49 @@ impl Scraper {
             .send()
             .await?;
 
-        let list: raw::FondInfo = list.json().await?;
+        let list: raw::FondMeldungen = list.json().await?;
 
         let mut name = String::new();
-        let mut rows = Vec::with_capacity(list.list.len());
+        let mut meldungen = Vec::with_capacity(list.list.len());
 
         for info in list.list {
             // Meldung wurde von einer anderen Meldung korrigiert?
             if info.gültig_bis.is_some() {
                 continue;
             }
-            let date = info.zufluss_korrigiert.unwrap_or(info.zufluss);
+            let datum = info.zufluss_korrigiert.unwrap_or(info.zufluss);
 
-            let row = ReportRow {
-                report_id: info.report_id,
-                date,
-                currency: info.currency,
-                is_yearly_report: info.yearly_report == "JA",
+            let row = FondMeldung {
+                melde_id: info.melde_id,
+                datum,
+                währung: info.währung,
+                ist_jahresmeldung: info.ist_jahresmeldung == "JA",
                 ..Default::default()
             };
             name = info.name;
-            rows.push(row);
+            meldungen.push(row);
         }
 
-        rows.sort_by_key(|r| r.date);
+        meldungen.sort_by_key(|r| r.datum);
 
-        Ok(Report {
+        Ok(FondMeldungen {
             isin: isin.into(),
             name,
-            rows,
+            meldungen,
         })
     }
 
-    pub async fn fetch_report_details(&mut self, report: &mut ReportRow) -> Result<()> {
-        let details_url = format!("{OEKB_REPORT_BASE}/{}/privatAnl", report.report_id);
+    pub async fn fetch_meldungs_details(&mut self, report: &mut FondMeldung) -> Result<()> {
+        let details_url = format!("{OEKB_REPORT_BASE}/{}/privatAnl", report.melde_id);
         let raw_details = self
             .client
             .get(details_url)
             .header(CONTEXT_HEADER_NAME, CONTEXT_HEADER_VALUE)
             .send()
             .await?;
-        let raw_details: raw::Report = raw_details.json().await?;
+        let raw_details: raw::Meldungsdetails = raw_details.json().await?;
 
-        report.rate = self.get_currency_rate(&report.currency, report.date).await;
+        report.währungskurs = self.get_währungs_kurs(&report.währung, report.datum).await;
 
         for raw_row in raw_details.list {
             match raw_row.key.as_str() {
@@ -216,7 +216,7 @@ mod tests {
     async fn test_korrigierter_report() {
         let scraper = Scraper::new();
 
-        let report = scraper.fetch_reports("IE00B9CQXS71").await.unwrap();
+        let report = scraper.fetch_meldungen("IE00B9CQXS71").await.unwrap();
         dbg!(report);
     }
 }

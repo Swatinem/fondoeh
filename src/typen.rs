@@ -1,5 +1,3 @@
-use std::num::NonZeroU32;
-
 pub use crate::format::{Datum, Rational64 as Zahl, WertpapierTyp};
 
 #[derive(Debug)]
@@ -43,7 +41,7 @@ pub enum TransaktionsTyp {
     Jahresmeldung { melde_id: u32 },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Steuer {
     Keine,
     Verkauf(SteuerVerkauf),
@@ -51,20 +49,20 @@ pub enum Steuer {
     Ausschüttung(SteuerAusschüttung),
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct SteuerVerkauf {
     pub überschüsse_994: Zahl,
     pub verluste_892: Zahl,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct SteuerDividende {
     pub dividendenerträge_863: Zahl,
     pub gezahlte_inländische_kest_899: Zahl,
     pub anrechenbare_quellensteuer_998: Zahl,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct SteuerAusschüttung {
     pub ausschüttungen_898: Zahl,
     pub ausschüttungsgleiche_erträge_937: Zahl,
@@ -78,7 +76,18 @@ impl Bestand {
 }
 
 impl Wertpapier {
-    pub fn jahr(&self, jahr: i32) -> Option<&Jahr> {
-        self.jahre.iter().find(|j| j.jahr == jahr)
+    pub fn iter_jahre(&self, jahr: Option<i32>) -> impl Iterator<Item = &Jahr> {
+        self.jahre
+            .iter()
+            .filter(move |j| jahr.is_none() || Some(j.jahr) == jahr)
+    }
+}
+
+impl Jahr {
+    pub fn erster(&self) -> Datum {
+        Datum::from_ymd_opt(self.jahr, 1, 1).unwrap()
+    }
+    pub fn letzter(&self) -> Datum {
+        Datum::from_ymd_opt(self.jahr, 12, 31).unwrap()
     }
 }

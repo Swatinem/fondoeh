@@ -6,17 +6,21 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.75"
 chrono = { version = "0.4.28", features = ["serde"] }
+clap = { version = "4.4.2", features = ["derive"] }
 fixed_decimal = { version = "0.5.3", features = ["ryu"] }
 glob = "0.3.1"
+globset = "0.4.13"
 icu_decimal = { version = "1.2.0", features = ["serde"] }
 icu_locid = "1.2.0"
 icu_provider = "1.2.0"
 icu_provider_adapters = "1.2.0"
 num-rational = "0.4.1"
 num-traits = "0.2.16"
+once_cell = "1.18.0"
 reqwest = { version = "0.11.20", features = ["json"] }
 serde = { version = "1.0.188", features = ["derive"] }
 serde_json = "1.0.105"
 serde_yaml = "0.8.26"
 tokio = { version = "1.32.0", features = ["rt", "macros", "rt-multi-thread"] }
+walkdir = "2.4.0"
 writeable = "0.5.2"
