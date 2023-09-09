@@ -11,7 +11,7 @@ type Ergebnis = (Bestand, TransaktionsTyp, Steuer);
 // Durchschnittspreis […] anzusetzen.
 pub fn kauf_berechnen(bestand: Bestand, stück: Zahl, preis: Zahl) -> Ergebnis {
     let stück_neu = bestand.stück + stück;
-    let preis_neu = (bestand.summe() + (stück * preis)) / stück_neu;
+    let preis_neu = runde((bestand.summe() + (stück * preis)) / stück_neu, 4);
 
     (
         Bestand {
@@ -52,7 +52,7 @@ pub fn verkauf_berechnen(mut bestand: Bestand, stück: Zahl, preis: Zahl) -> Erg
 
 pub fn split_berechnen(mut bestand: Bestand, faktor: Zahl) -> Ergebnis {
     bestand.stück *= faktor;
-    bestand.preis /= faktor;
+    bestand.preis = runde(bestand.preis / faktor, 4);
 
     (bestand, TransaktionsTyp::Split { faktor }, Steuer::Keine)
 }
@@ -75,8 +75,10 @@ pub fn dividende_berechnen(
     } else {
         // TODO: hängt dies vom Land ab?
         let anrechenbarer_quellensteuersatz = Zahl::new(15, 100);
-        steuer.anrechenbare_quellensteuer_998 =
-            (brutto * anrechenbarer_quellensteuersatz).min(gezahlte_quellensteuer);
+        steuer.anrechenbare_quellensteuer_998 = runde(
+            (brutto * anrechenbarer_quellensteuersatz).min(gezahlte_quellensteuer),
+            2,
+        );
     }
 
     (
@@ -121,13 +123,24 @@ pub fn meldung_berechnen(bestand: &mut Bestand, meldung: &FondMeldung) -> Steuer
     let prostück = bestand.stück / meldung.währungskurs;
 
     let steuer = SteuerAusschüttung {
-        ausschüttungen_898: meldung.StB_E1KV_Ausschuettungen * prostück,
-        ausschüttungsgleiche_erträge_937: meldung.StB_E1KV_AGErtraege * prostück,
-        anrechenbare_quellensteuer_998: meldung.StB_E1KV_anzurechnende_ausl_Quellensteuer
-            * prostück,
+        ausschüttungen_898: runde(meldung.StB_E1KV_Ausschuettungen * prostück, 2),
+        ausschüttungsgleiche_erträge_937: runde(meldung.StB_E1KV_AGErtraege * prostück, 2),
+        anrechenbare_quellensteuer_998: runde(
+            meldung.StB_E1KV_anzurechnende_ausl_Quellensteuer * prostück,
+            2,
+        ),
     };
 
-    bestand.preis += meldung.StB_E1KV_Korrekturbetrag_saldiert / meldung.währungskurs;
+    let korrektur = runde(
+        meldung.StB_E1KV_Korrekturbetrag_saldiert / meldung.währungskurs,
+        4,
+    );
+    bestand.preis += korrektur;
 
     Steuer::Ausschüttung(steuer)
+}
+
+fn runde(zahl: Zahl, stellen: u32) -> Zahl {
+    let faktor = 10_i64.pow(stellen);
+    (zahl * faktor).round() / faktor
 }
