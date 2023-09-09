@@ -8,7 +8,9 @@
         suffix: alloc::borrow::Cow::Borrowed(""),
     },
     decimal_separator: alloc::borrow::Cow::Borrowed(","),
-    grouping_separator: alloc::borrow::Cow::Borrowed("\u{a0}"),
+    // icu4x kennt das noch nicht
+    // <https://github.com/unicode-org/cldr/blob/02a4b1c580095e226805fb3faf4de203074148df/common/main/de_AT.xml#L122C19-L122C20>
+    grouping_separator: alloc::borrow::Cow::Borrowed("."),
     grouping_sizes: ::icu_decimal::provider::GroupingSizesV1 {
         primary: 3u8,
         secondary: 3u8,
