@@ -2,6 +2,7 @@ use std::fmt;
 
 use num_traits::Zero;
 
+use crate::formatierung::Eur;
 use crate::{Bestand, Datum, Jahr, TransaktionsTyp, Wertpapier};
 use crate::{Steuer, SteuerAusschüttung, SteuerDividende, SteuerVerkauf};
 
@@ -49,16 +50,21 @@ pub fn schreibe_tsv<W: fmt::Write>(
 
         match transaktion.typ {
             TransaktionsTyp::Kauf { stück, preis } => {
-                write!(w, "Kauf\t{}\t{}\t\t\t\t", stück, preis)?;
+                write!(w, "Kauf\t{}\t{}\t\t\t\t", stück, Eur(preis, 4))?;
             }
             TransaktionsTyp::Verkauf { stück, preis } => {
-                write!(w, "Verkauf\t{}\t{}\t\t\t\t", stück, preis)?;
+                write!(w, "Verkauf\t{}\t{}\t\t\t\t", stück, Eur(preis, 4))?;
             }
             TransaktionsTyp::Split { faktor } => {
                 write!(w, "Split\t{}\t\t\t\t\t", faktor)?;
             }
             TransaktionsTyp::Dividende { brutto, auszahlung } => {
-                write!(w, "Dividende\t\t\t{}\t{}\t\t", brutto, auszahlung)?;
+                write!(
+                    w,
+                    "Dividende\t\t\t{}\t{}\t\t",
+                    Eur(brutto, 2),
+                    Eur(auszahlung, 2)
+                )?;
             }
             TransaktionsTyp::Ausschüttung { brutto, melde_id } => {
                 let aktion = if melde_id.is_some() {
@@ -95,7 +101,12 @@ fn schreibe_anfang<W: fmt::Write>(
     write!(
         w,
         "{}\t{}\t{:?}\t{}\t{}\t{}\t",
-        wertpapier.name, wertpapier.isin, wertpapier.typ, datum, bestand.stück, bestand.preis,
+        wertpapier.name,
+        wertpapier.isin,
+        wertpapier.typ,
+        datum,
+        bestand.stück,
+        Eur(bestand.preis, 4),
     )
 }
 
@@ -111,37 +122,41 @@ fn schreibe_steuern<W: fmt::Write>(w: &mut W, steuer: Steuer) -> fmt::Result {
     }
 
     if !verkauf.überschüsse_994.is_zero() {
-        write!(w, "{}", verkauf.überschüsse_994)?;
+        write!(w, "{}", Eur(verkauf.überschüsse_994, 2))?;
     }
     w.write_char('\t')?;
     if !verkauf.verluste_892.is_zero() {
-        write!(w, "{}", verkauf.verluste_892)?;
+        write!(w, "{}", Eur(verkauf.verluste_892, 2))?;
     }
     w.write_char('\t')?;
 
     if !dividende.dividendenerträge_863.is_zero() {
-        write!(w, "{}", dividende.dividendenerträge_863)?;
+        write!(w, "{}", Eur(dividende.dividendenerträge_863, 2))?;
     }
     w.write_char('\t')?;
     if !dividende.gezahlte_inländische_kest_899.is_zero() {
-        write!(w, "{}", dividende.gezahlte_inländische_kest_899)?;
+        write!(w, "{}", Eur(dividende.gezahlte_inländische_kest_899, 2))?;
     }
     w.write_char('\t')?;
     if !dividende.anrechenbare_quellensteuer_998.is_zero() {
-        write!(w, "{}", dividende.anrechenbare_quellensteuer_998)?;
+        write!(w, "{}", Eur(dividende.anrechenbare_quellensteuer_998, 2))?;
     }
     w.write_char('\t')?;
 
     if !ausschüttung.ausschüttungen_898.is_zero() {
-        write!(w, "{}", ausschüttung.ausschüttungen_898)?;
+        write!(w, "{}", Eur(ausschüttung.ausschüttungen_898, 2))?;
     }
     w.write_char('\t')?;
     if !ausschüttung.ausschüttungsgleiche_erträge_937.is_zero() {
-        write!(w, "{}", ausschüttung.ausschüttungsgleiche_erträge_937)?;
+        write!(
+            w,
+            "{}",
+            Eur(ausschüttung.ausschüttungsgleiche_erträge_937, 2)
+        )?;
     }
     w.write_char('\t')?;
     if !ausschüttung.anrechenbare_quellensteuer_998.is_zero() {
-        write!(w, "{}", ausschüttung.anrechenbare_quellensteuer_998)?;
+        write!(w, "{}", Eur(ausschüttung.anrechenbare_quellensteuer_998, 2))?;
     }
     w.write_char('\t')
 }
