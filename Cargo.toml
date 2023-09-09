@@ -12,7 +12,7 @@ glob = "0.3.1"
 globset = "0.4.13"
 icu_decimal = { version = "1.2.0", features = ["serde"] }
 icu_locid = "1.2.0"
-icu_provider = "1.2.0"
+icu_provider = { version = "1.2.0", features = ["sync"] }
 icu_provider_adapters = "1.2.0"
 num-rational = "0.4.1"
 num-traits = "0.2.16"

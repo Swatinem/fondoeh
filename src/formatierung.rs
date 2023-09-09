@@ -51,24 +51,11 @@ mod provider {
     include!("../icu4x_data/mod.rs");
 }
 
-struct SyncSendFfs(FixedDecimalFormatter);
-unsafe impl Send for SyncSendFfs {}
-unsafe impl Sync for SyncSendFfs {}
-impl std::ops::Deref for SyncSendFfs {
-    type Target = FixedDecimalFormatter;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-static DECIMAL_FORMATTER: Lazy<SyncSendFfs> = Lazy::new(|| {
-    SyncSendFfs(
-        FixedDecimalFormatter::try_new_unstable(
-            &provider::BakedDataProvider,
-            &LOCALE.into(),
-            Default::default(),
-        )
-        .unwrap(),
+static DECIMAL_FORMATTER: Lazy<FixedDecimalFormatter> = Lazy::new(|| {
+    FixedDecimalFormatter::try_new_unstable(
+        &provider::BakedDataProvider,
+        &LOCALE.into(),
+        Default::default(),
     )
+    .unwrap()
 });
