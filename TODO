@@ -1,2 +1,2 @@
-- Eine Decimal oder Fractional crate finden :-)
-- Besseres Error Handling, aka weniger `unwrap`
+- Einige Dinge Automatisch abfragen?
+  - https://query1.finance.yahoo.com/v8/finance/chart/NVD.DE?interval=1d&period1=1536451200&period2=1694217600&events=capitalGain|div|split
