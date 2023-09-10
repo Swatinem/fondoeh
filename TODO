@@ -1,2 +1,10 @@
 - Einige Dinge Automatisch abfragen?
   - https://query1.finance.yahoo.com/v8/finance/chart/NVD.DE?interval=1d&period1=1536451200&period2=1694217600&events=capitalGain|div|split
+
+Einkommensteuergesetz
+https://www.ris.bka.gv.at/GeltendeFassung.wxe?Abfrage=Bundesnormen&Gesetzesnummer=10004570
+
+Kapitalmaßnahmen-VO
+https://www.ris.bka.gv.at/GeltendeFassung.wxe?Abfrage=Bundesnormen&Gesetzesnummer=20007476
+
+§ 5. Auf einem Wertpapierdepot eingebuchte Bezugsrechte sind für Zwecke des Kapitalertragsteuerabzuges mit einem Wert von Null anzusetzen. Die Anschaffungskosten der Aktien, die die Bezugsrechte vermitteln, bleiben unberührt.

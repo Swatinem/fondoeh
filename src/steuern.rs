@@ -50,6 +50,10 @@ pub fn verkauf_berechnen(mut bestand: Bestand, stück: Zahl, preis: Zahl) -> Erg
     )
 }
 
+// Laut § 6 (1) gilt:
+// Wird im Zuge eines Aktiensplits der Nennwert einer Aktie heruntergesetzt und daher
+// die Anzahl der ausgegebenen Aktien erhöht, sind die bisherigen Anschaffungskosten auf die
+// im Zuge des Aktiensplits ausgegebenen Aktien aufzuteilen.
 pub fn split_berechnen(mut bestand: Bestand, faktor: Zahl) -> Ergebnis {
     bestand.stück *= faktor;
     bestand.preis = runde(bestand.preis / faktor, 4);

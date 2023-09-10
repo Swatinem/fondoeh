@@ -72,7 +72,7 @@ pub fn schreibe_tsv<W: fmt::Write>(
                 } else {
                     "Ausschüttung ohne Meldung"
                 };
-                write!(w, "{}\t\t\t{}\t\t", aktion, brutto)?;
+                write!(w, "{}\t\t\t{}\t\t", aktion, Eur(brutto, 2))?;
                 if let Some(melde_id) = melde_id {
                     write!(w, "{melde_id}")?;
                 }
