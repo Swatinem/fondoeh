@@ -3,10 +3,12 @@ use chrono::{Datelike, Days};
 use num_traits::identities::Zero;
 
 use crate::format;
+use crate::kursdaten::Kursdaten;
 use crate::meldungen::Scraper;
 use crate::steuern::{
-    ausschüttung_berechnen, dividende_berechnen, einbuchung_berechnen, kauf_berechnen,
-    meldung_berechnen, spitzenverwertung_berechnen, split_berechnen, verkauf_berechnen,
+    ausgliederung_berechnen, ausschüttung_berechnen, dividende_berechnen, einbuchung_berechnen,
+    kauf_berechnen, meldung_berechnen, spitzenverwertung_berechnen, split_berechnen,
+    verkauf_berechnen,
 };
 use crate::{Bestand, Datum, Jahr, Transaktion, TransaktionsTyp, Wertpapier, WertpapierTyp};
 
@@ -14,12 +16,18 @@ use crate::{Bestand, Datum, Jahr, Transaktion, TransaktionsTyp, Wertpapier, Wert
 pub struct Rechner {
     pub heute: Datum,
     scraper: Scraper,
+    kursdaten: Kursdaten,
 }
 impl Rechner {
     pub fn new() -> Self {
         let heute = chrono::Local::now().date_naive();
         let scraper = Scraper::new();
-        Self { heute, scraper }
+        let kursdaten = Kursdaten::new();
+        Self {
+            heute,
+            scraper,
+            kursdaten,
+        }
     }
 
     pub async fn wertpapier_auswerten(
@@ -28,22 +36,30 @@ impl Rechner {
     ) -> Result<Wertpapier> {
         let format::Wertpapier {
             typ,
-            mut name,
+            // mut name,
             isin,
             mut transaktionen,
+            ..
         } = wertpapier;
 
         transaktionen.sort_by_key(|t| t.datum());
         let mut transaktionen = transaktionen.into_iter().peekable();
 
-        let meldungen = if typ == WertpapierTyp::Etf {
-            let meldungen = self.scraper.fetch_meldungen(&isin).await?;
-            name = meldungen.name;
+        let mut meldungen = vec![];
+        let mut symbol = String::new();
 
-            meldungen.meldungen
+        let name = if typ == WertpapierTyp::Etf {
+            let meldungsdaten = self.scraper.fetch_meldungen(&isin).await?;
+
+            meldungen = meldungsdaten.meldungen;
+            meldungsdaten.name
         } else {
-            vec![]
+            let metadaten = self.kursdaten.aktie_suchen(&isin).await?;
+
+            symbol = metadaten.symbol;
+            metadaten.name
         };
+
         let mut meldungen = meldungen.into_iter().peekable();
 
         let mut jahre = vec![];
@@ -130,11 +146,17 @@ impl Rechner {
                     split_berechnen(bestand, faktor)
                 }
                 format::Transaktion::Ausgliederung(_, format::Zahl(faktor), isin) => {
-                    // ausgliederung_berechnen(bestand, faktor)
-                    todo!()
+                    let eigener_kurs = self.kursdaten.kurs_abrufen(&symbol, datum).await?;
+                    let andere_metadaten = self.kursdaten.aktie_suchen(&isin).await?;
+                    let anderer_kurs = self
+                        .kursdaten
+                        .kurs_abrufen(&andere_metadaten.symbol, datum)
+                        .await?;
+
+                    ausgliederung_berechnen(bestand, faktor, isin, eigener_kurs, anderer_kurs)
                 }
                 format::Transaktion::Einbuchung(_, format::Zahl(stück)) => {
-                    let preis = todo!();
+                    let preis = self.kursdaten.kurs_abrufen(&symbol, datum).await?;
                     einbuchung_berechnen(bestand, stück, preis)
                 }
                 format::Transaktion::Spitzenverwertung(

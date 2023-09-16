@@ -38,7 +38,7 @@ pub enum TransaktionsTyp {
 
     Split { faktor: Zahl },
     // TODO:
-    Ausgliederung { faktor: Zahl },
+    Ausgliederung { faktor: Zahl, isin: String },
     Einbuchung { stück: Zahl, preis: Zahl },
     Spitzenverwertung { stück: Zahl, preis: Zahl },
 

@@ -48,38 +48,43 @@ pub fn schreibe_tsv<W: fmt::Write>(
     for transaktion in &daten.transaktionen {
         schreibe_anfang(w, wertpapier, transaktion.datum, transaktion.bestand)?;
 
-        match transaktion.typ {
+        match &transaktion.typ {
             TransaktionsTyp::Kauf { stück, preis } => {
-                write!(w, "Kauf\t{}\t{}\t\t\t\t", stück, Eur(preis, 4))?;
+                write!(w, "Kauf\t{}\t{}\t\t\t\t", stück, Eur(*preis, 4))?;
             }
             TransaktionsTyp::Verkauf { stück, preis } => {
-                write!(w, "Verkauf\t{}\t{}\t\t\t\t", stück, Eur(preis, 4))?;
+                write!(w, "Verkauf\t{}\t{}\t\t\t\t", stück, Eur(*preis, 4))?;
             }
 
             TransaktionsTyp::Split { faktor } => {
                 write!(w, "Split\t{}\t\t\t\t\t", faktor)?;
             }
-            TransaktionsTyp::Ausgliederung { faktor } => {
-                todo!()
+            TransaktionsTyp::Ausgliederung { faktor, isin } => {
+                write!(w, "Split\t{}\t\t\t\t\t", faktor)?;
             }
             TransaktionsTyp::Einbuchung { stück, preis } => {
                 write!(
                     w,
                     "Einbuchung nach Ausgliederung\t{}\t{}\t\t\t\t",
                     stück,
-                    Eur(preis, 4)
+                    Eur(*preis, 4)
                 )?;
             }
             TransaktionsTyp::Spitzenverwertung { stück, preis } => {
-                write!(w, "Spitzenverwertung\t{}\t{}\t\t\t\t", stück, Eur(preis, 4))?;
+                write!(
+                    w,
+                    "Spitzenverwertung\t{}\t{}\t\t\t\t",
+                    stück,
+                    Eur(*preis, 4)
+                )?;
             }
 
             TransaktionsTyp::Dividende { brutto, auszahlung } => {
                 write!(
                     w,
                     "Dividende\t\t\t{}\t{}\t\t",
-                    Eur(brutto, 2),
-                    Eur(auszahlung, 2)
+                    Eur(*brutto, 2),
+                    Eur(*auszahlung, 2)
                 )?;
             }
             TransaktionsTyp::Ausschüttung { brutto, melde_id } => {
@@ -88,7 +93,7 @@ pub fn schreibe_tsv<W: fmt::Write>(
                 } else {
                     "Ausschüttung ohne Meldung"
                 };
-                write!(w, "{}\t\t\t{}\t\t", aktion, Eur(brutto, 2))?;
+                write!(w, "{}\t\t\t{}\t\t", aktion, Eur(*brutto, 2))?;
                 if let Some(melde_id) = melde_id {
                     write!(w, "{melde_id}")?;
                 }

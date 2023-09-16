@@ -86,8 +86,11 @@ pub fn schreibe_jahr<W: fmt::Write>(w: &mut W, jahr: &Jahr) -> fmt::Result {
             TransaktionsTyp::Split { faktor } => {
                 writeln!(w, "Aktiensplit am {datum} mit Faktor {faktor}")?;
             }
-            TransaktionsTyp::Ausgliederung { faktor } => {
-                todo!()
+            TransaktionsTyp::Ausgliederung { faktor, isin } => {
+                writeln!(
+                    w,
+                    "Ausgliederung am {datum} von `{isin}` mit Faktor {faktor}"
+                )?;
             }
             TransaktionsTyp::Einbuchung { stück, preis } => {
                 writeln!(

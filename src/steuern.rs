@@ -81,6 +81,44 @@ pub fn split_berechnen(mut bestand: Bestand, faktor: Zahl) -> Ergebnis {
     (bestand, TransaktionsTyp::Split { faktor }, Steuer::Keine)
 }
 
+// Laut § 4 (2) gilt:
+// Werden Aktien im Zuge einer Abspaltung auf ein Wertpapierdepot eingebucht,
+// sind für Zwecke des Kapitalertragsteuerabzuges die Anschaffungskosten der vor
+// der Abspaltung bestehenden Aktien auf die bestehenden und die neu eingebuchten
+// Aktien aufzuteilen. Diese Aufteilung hat im Verhältnis der Verkehrswerte der
+// bestehenden zu den eingebuchten Aktien zu erfolgen.
+pub fn ausgliederung_berechnen(
+    mut bestand: Bestand,
+    faktor: Zahl,
+    isin: String,
+    eigener_kurs: Zahl,
+    anderer_kurs: Zahl,
+) -> Ergebnis {
+    let eigener_bestand = Bestand {
+        stück: bestand.stück,
+        preis: eigener_kurs,
+    };
+    let anderer_bestand = Bestand {
+        stück: bestand.stück * faktor,
+        preis: anderer_kurs,
+    };
+
+    dbg!(bestand);
+    dbg!(eigener_bestand.summe(), anderer_bestand.summe());
+    let gesamtwert = eigener_bestand.summe() + anderer_bestand.summe();
+    let prozentual = eigener_bestand.summe() / gesamtwert;
+    dbg!(prozentual);
+
+    bestand.preis = runde(bestand.preis * prozentual, 4);
+    dbg!(bestand);
+
+    (
+        bestand,
+        TransaktionsTyp::Ausgliederung { faktor, isin },
+        Steuer::Keine,
+    )
+}
+
 pub fn dividende_berechnen(
     bestand: Bestand,
     isin: &str,
