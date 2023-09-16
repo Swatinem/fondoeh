@@ -25,7 +25,12 @@ pub struct Wertpapier {
 pub enum Transaktion {
     Kauf(Datum, Zahl, Zahl),
     Verkauf(Datum, Zahl, Zahl),
+
     Split(Datum, Zahl),
+    Ausgliederung(Datum, Zahl, String),
+    Einbuchung(Datum, Zahl),
+    Spitzenverwertung(Datum, Zahl, Zahl),
+
     Dividende(Datum, Zahl, Zahl),
     Ausschüttung(Datum, Zahl),
 }
@@ -35,6 +40,9 @@ impl Transaktion {
         match self {
             Transaktion::Kauf(datum, _, _) => *datum,
             Transaktion::Verkauf(datum, _, _) => *datum,
+            Transaktion::Spitzenverwertung(datum, _, _) => *datum,
+            Transaktion::Ausgliederung(datum, _, _) => *datum,
+            Transaktion::Einbuchung(datum, _) => *datum,
             Transaktion::Split(datum, _) => *datum,
             Transaktion::Dividende(datum, _, _) => *datum,
             Transaktion::Ausschüttung(datum, _) => *datum,

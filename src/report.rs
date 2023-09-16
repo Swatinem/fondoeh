@@ -82,9 +82,28 @@ pub fn schreibe_jahr<W: fmt::Write>(w: &mut W, jahr: &Jahr) -> fmt::Result {
             TransaktionsTyp::Verkauf { stück, preis } => {
                 writeln!(w, "Verkauf am {datum}: {}", ReportBestand(*stück, *preis))?;
             }
+
             TransaktionsTyp::Split { faktor } => {
                 writeln!(w, "Aktiensplit am {datum} mit Faktor {faktor}")?;
             }
+            TransaktionsTyp::Ausgliederung { faktor } => {
+                todo!()
+            }
+            TransaktionsTyp::Einbuchung { stück, preis } => {
+                writeln!(
+                    w,
+                    "Einbuchung nach Ausgliederung am {datum}: {}",
+                    ReportBestand(*stück, *preis)
+                )?;
+            }
+            TransaktionsTyp::Spitzenverwertung { stück, preis } => {
+                writeln!(
+                    w,
+                    "Spitzenverwertung am {datum}: {}",
+                    ReportBestand(*stück, *preis)
+                )?;
+            }
+
             TransaktionsTyp::Dividende { auszahlung, .. } => {
                 writeln!(w, "Dividendenzahlung am {datum}:")?;
                 writeln!(w, "Auszahlung: {}", Eur(*auszahlung, 2))?;

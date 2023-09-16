@@ -50,6 +50,16 @@ pub fn verkauf_berechnen(mut bestand: Bestand, stück: Zahl, preis: Zahl) -> Erg
     )
 }
 
+// Das gleiche wie ein Verkauf, nur wollen wir einen anderen Typ nur für die Anzeige
+pub fn spitzenverwertung_berechnen(mut bestand: Bestand, stück: Zahl, preis: Zahl) -> Ergebnis {
+    let (bestand, _transaktion, steuer) = verkauf_berechnen(bestand, stück, preis);
+    (
+        bestand,
+        TransaktionsTyp::Spitzenverwertung { stück, preis },
+        steuer,
+    )
+}
+
 // Laut § 6 (1) gilt:
 // Wird im Zuge eines Aktiensplits der Nennwert einer Aktie heruntergesetzt und daher
 // die Anzahl der ausgegebenen Aktien erhöht, sind die bisherigen Anschaffungskosten auf die

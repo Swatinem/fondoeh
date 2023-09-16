@@ -35,7 +35,13 @@ pub struct Transaktion {
 pub enum TransaktionsTyp {
     Kauf { stück: Zahl, preis: Zahl },
     Verkauf { stück: Zahl, preis: Zahl },
+
     Split { faktor: Zahl },
+    // TODO:
+    Ausgliederung { faktor: Zahl },
+    Einbuchung { stück: Zahl, preis: Zahl },
+    Spitzenverwertung { stück: Zahl, preis: Zahl },
+
     Dividende { brutto: Zahl, auszahlung: Zahl },
     Ausschüttung { brutto: Zahl, melde_id: Option<u32> },
     Jahresmeldung { melde_id: u32 },

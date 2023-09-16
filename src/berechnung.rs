@@ -6,7 +6,7 @@ use crate::format;
 use crate::meldungen::Scraper;
 use crate::steuern::{
     ausschüttung_berechnen, dividende_berechnen, kauf_berechnen, meldung_berechnen,
-    split_berechnen, verkauf_berechnen,
+    spitzenverwertung_berechnen, split_berechnen, verkauf_berechnen,
 };
 use crate::{Bestand, Datum, Jahr, Transaktion, TransaktionsTyp, Wertpapier, WertpapierTyp};
 
@@ -125,9 +125,24 @@ impl Rechner {
                 format::Transaktion::Verkauf(_, format::Zahl(stück), format::Zahl(preis)) => {
                     verkauf_berechnen(bestand, stück, preis)
                 }
+
                 format::Transaktion::Split(_, format::Zahl(faktor)) => {
                     split_berechnen(bestand, faktor)
                 }
+                format::Transaktion::Ausgliederung(_, format::Zahl(faktor), isin) => {
+                    // ausgliederung_berechnen(bestand, faktor)
+                    todo!()
+                }
+                format::Transaktion::Einbuchung(_, format::Zahl(stück)) => {
+                    //kauf_berechnen(bestand, stück, preis)
+                    todo!()
+                }
+                format::Transaktion::Spitzenverwertung(
+                    _,
+                    format::Zahl(stück),
+                    format::Zahl(preis),
+                ) => spitzenverwertung_berechnen(bestand, stück, preis),
+
                 format::Transaktion::Dividende(
                     _,
                     format::Zahl(brutto),
