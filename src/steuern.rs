@@ -23,6 +23,16 @@ pub fn kauf_berechnen(bestand: Bestand, stück: Zahl, preis: Zahl) -> Ergebnis {
     )
 }
 
+// Das gleiche wie ein Kauf, nur wollen wir einen anderen Typ für die Ausgabe
+pub fn einbuchung_berechnen(bestand: Bestand, stück: Zahl, preis: Zahl) -> Ergebnis {
+    let (bestand, _transaktion, steuer) = kauf_berechnen(bestand, stück, preis);
+    (
+        bestand,
+        TransaktionsTyp::Einbuchung { stück, preis },
+        steuer,
+    )
+}
+
 // Laut § 27a (3) 2. gilt:
 // Als Einkünfte anzusetzen sind
 // [b]ei realisierten Wertsteigerungen […] der Unterschiedsbetrag
@@ -50,8 +60,8 @@ pub fn verkauf_berechnen(mut bestand: Bestand, stück: Zahl, preis: Zahl) -> Erg
     )
 }
 
-// Das gleiche wie ein Verkauf, nur wollen wir einen anderen Typ nur für die Anzeige
-pub fn spitzenverwertung_berechnen(mut bestand: Bestand, stück: Zahl, preis: Zahl) -> Ergebnis {
+// Das gleiche wie ein Verkauf, nur wollen wir einen anderen Typ für die Ausgabe
+pub fn spitzenverwertung_berechnen(bestand: Bestand, stück: Zahl, preis: Zahl) -> Ergebnis {
     let (bestand, _transaktion, steuer) = verkauf_berechnen(bestand, stück, preis);
     (
         bestand,

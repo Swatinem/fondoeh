@@ -5,8 +5,8 @@ use num_traits::identities::Zero;
 use crate::format;
 use crate::meldungen::Scraper;
 use crate::steuern::{
-    ausschüttung_berechnen, dividende_berechnen, kauf_berechnen, meldung_berechnen,
-    spitzenverwertung_berechnen, split_berechnen, verkauf_berechnen,
+    ausschüttung_berechnen, dividende_berechnen, einbuchung_berechnen, kauf_berechnen,
+    meldung_berechnen, spitzenverwertung_berechnen, split_berechnen, verkauf_berechnen,
 };
 use crate::{Bestand, Datum, Jahr, Transaktion, TransaktionsTyp, Wertpapier, WertpapierTyp};
 
@@ -134,8 +134,8 @@ impl Rechner {
                     todo!()
                 }
                 format::Transaktion::Einbuchung(_, format::Zahl(stück)) => {
-                    //kauf_berechnen(bestand, stück, preis)
-                    todo!()
+                    let preis = todo!();
+                    einbuchung_berechnen(bestand, stück, preis)
                 }
                 format::Transaktion::Spitzenverwertung(
                     _,

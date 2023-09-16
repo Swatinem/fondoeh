@@ -55,9 +55,25 @@ pub fn schreibe_tsv<W: fmt::Write>(
             TransaktionsTyp::Verkauf { stück, preis } => {
                 write!(w, "Verkauf\t{}\t{}\t\t\t\t", stück, Eur(preis, 4))?;
             }
+
             TransaktionsTyp::Split { faktor } => {
                 write!(w, "Split\t{}\t\t\t\t\t", faktor)?;
             }
+            TransaktionsTyp::Ausgliederung { faktor } => {
+                todo!()
+            }
+            TransaktionsTyp::Einbuchung { stück, preis } => {
+                write!(
+                    w,
+                    "Einbuchung nach Ausgliederung\t{}\t{}\t\t\t\t",
+                    stück,
+                    Eur(preis, 4)
+                )?;
+            }
+            TransaktionsTyp::Spitzenverwertung { stück, preis } => {
+                write!(w, "Spitzenverwertung\t{}\t{}\t\t\t\t", stück, Eur(preis, 4))?;
+            }
+
             TransaktionsTyp::Dividende { brutto, auszahlung } => {
                 write!(
                     w,
