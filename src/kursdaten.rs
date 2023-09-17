@@ -7,7 +7,9 @@ const SEARCH_BASE: &str =
     "https://query2.finance.yahoo.com/v1/finance/search?quotesCount=5&newsCount=0&listsCount=0&q=";
 const CHART_BASE: &str = "https://query1.finance.yahoo.com/v8/finance/chart/";
 
-const BÖRSEN: &[&str] = &["GER", "FRA", "STU", "VIE", "PAR", "AMS", "NYQ"];
+const BÖRSEN: &[&str] = &[
+    "GER", "FRA", /*"STU",*/ "VIE", "PAR", "AMS", "NYQ", "HKG",
+];
 
 #[derive(Debug)]
 pub struct Metadaten {
@@ -37,9 +39,9 @@ impl Kursabfrage {
 
 impl Kursabfrage {
     pub async fn aktie_suchen(&self, suche: &str) -> Result<Option<Metadaten>> {
-        let list_url = format!("{SEARCH_BASE}{suche}");
-        let list = self.client.get(list_url).send().await?;
-
+        let url = format!("{SEARCH_BASE}{suche}");
+        tracing::debug!(?url, "Aktie suchen");
+        let list = self.client.get(url).send().await?;
         let list: raw::Search = list.json().await.context("Aktie suchen")?;
 
         let mut aktien: Vec<_> = list
@@ -74,12 +76,13 @@ impl Kursabfrage {
         let vorher = (datum - Days::new(1)).and_hms_opt(0, 0, 0).unwrap();
         let nachher = (datum + Days::new(14)).and_hms_opt(0, 0, 0).unwrap();
 
-        let chart_url = format!(
+        let url = format!(
             "{CHART_BASE}{symbol}?interval=1d&period1={}&period2={}",
             vorher.timestamp(),
             nachher.timestamp()
         );
-        let chart = self.client.get(chart_url).send().await?;
+        tracing::debug!(?url, "Kursdaten abrufen");
+        let chart = self.client.get(url).send().await?;
         let chart: raw::Chart = chart.json().await.context("Kursdaten abrufen")?;
 
         let result = chart

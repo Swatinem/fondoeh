@@ -15,6 +15,7 @@ const CONTEXT_HEADER_VALUE: &str =
     "eyJsYW5ndWFnZSI6ImRlIiwicGxhdGZvcm0iOiJLTVMiLCJkYXNoYm9hcmQiOiJLTVNfT1VUUFVUIn0=";
 
 const ECB_USD: &str = "https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/usd.xml";
+// TODO: https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/hkd.xml
 
 mod raw {
     use super::*;
