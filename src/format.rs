@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::fmt;
 
 use anyhow::{Context, Result};
 pub use chrono::naive::NaiveDate as Datum;
@@ -10,6 +11,15 @@ use serde::Deserialize;
 pub enum WertpapierTyp {
     Etf,
     Aktie,
+}
+
+impl fmt::Display for WertpapierTyp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            WertpapierTyp::Etf => "ETF",
+            WertpapierTyp::Aktie => "Aktie",
+        })
+    }
 }
 
 #[derive(Debug, Deserialize)]

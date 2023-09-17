@@ -16,7 +16,7 @@ use crate::{Bestand, Datum, Jahr, Transaktion, TransaktionsTyp, Wertpapier, Wert
 pub struct Rechner {
     pub heute: Datum,
     scraper: Scraper,
-    kursdaten: Kursabfrage,
+    kursabfrage: Kursabfrage,
 }
 impl Rechner {
     pub fn new() -> Self {
@@ -26,7 +26,7 @@ impl Rechner {
         Self {
             heute,
             scraper,
-            kursdaten,
+            kursabfrage: kursdaten,
         }
     }
 
@@ -55,7 +55,7 @@ impl Rechner {
             name = meldungsdaten.name;
         } else {
             let suche = symbol.as_deref().unwrap_or(isin.as_str());
-            if let Some(metadaten) = self.kursdaten.aktie_suchen(suche).await? {
+            if let Some(metadaten) = self.kursabfrage.aktie_suchen(suche).await? {
                 symbol = Some(metadaten.symbol);
                 name = metadaten.name;
             }
@@ -146,30 +146,21 @@ impl Rechner {
                 format::Transaktion::Split(_, format::Zahl(faktor)) => {
                     split_berechnen(bestand, faktor)
                 }
-                format::Transaktion::Ausgliederung(_, format::Zahl(faktor), isin) => {
-                    let symbol = symbol.as_deref().context("Aktie sollte ein Symbol haben")?;
-                    let eigener_kurs = self.kursdaten.kurs_abrufen(symbol, datum).await?;
-                    let andere_metadaten = self
-                        .kursdaten
-                        .aktie_suchen(&isin)
-                        .await?
-                        .context("Aktie sollte gefunden werden")?;
-                    let anderer_kurs = self
-                        .kursdaten
-                        .kurs_abrufen(&andere_metadaten.symbol, datum)
-                        .await?;
+                format::Transaktion::Ausgliederung(_, format::Zahl(faktor), andere_isin) => {
+                    let eigener_kurs = self.kursabfrage.kurs_für_isin(&isin, datum).await?;
+                    let anderer_kurs = self.kursabfrage.kurs_für_isin(&andere_isin, datum).await?;
 
                     ausgliederung_berechnen(
                         bestand,
                         faktor,
-                        isin,
+                        andere_isin,
                         eigener_kurs.open,
                         anderer_kurs.open,
                     )
                 }
                 format::Transaktion::Einbuchung(_, format::Zahl(stück)) => {
                     let symbol = symbol.as_deref().context("Aktie sollte ein Symbol haben")?;
-                    let kurs = self.kursdaten.kurs_abrufen(symbol, datum).await?;
+                    let kurs = self.kursabfrage.kurs_abrufen(symbol, datum).await?;
                     einbuchung_berechnen(bestand, stück, kurs.open)
                 }
                 format::Transaktion::Spitzenverwertung(
@@ -215,6 +206,7 @@ impl Rechner {
             typ,
             name,
             isin,
+            symbol,
             jahre,
         })
     }

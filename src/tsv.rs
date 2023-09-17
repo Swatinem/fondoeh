@@ -121,7 +121,7 @@ fn schreibe_anfang<W: fmt::Write>(
 ) -> fmt::Result {
     write!(
         w,
-        "{}\t{}\t{:?}\t{}\t{}\t{}\t",
+        "{}\t{}\t{}\t{}\t{}\t{}\t",
         wertpapier.name,
         wertpapier.isin,
         wertpapier.typ,

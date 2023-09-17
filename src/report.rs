@@ -4,7 +4,7 @@ use std::fmt::Write;
 use num_traits::Zero;
 
 use crate::formatierung::{Eur, Stück};
-use crate::{Bestand, Datum, Jahr, Steuer, TransaktionsTyp, Wertpapier, WertpapierTyp, Zahl};
+use crate::{Bestand, Datum, Jahr, Steuer, TransaktionsTyp, Wertpapier, Zahl};
 
 pub const BREITE: usize = 80;
 
@@ -14,12 +14,13 @@ pub struct ReportTitel<'a> {
 impl fmt::Display for ReportTitel<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let wertpapier = self.wertpapier;
-        let typ = match wertpapier.typ {
-            WertpapierTyp::Etf => "ETF",
-            WertpapierTyp::Aktie => "Aktie",
-        };
-        writeln!(f, "ISIN: {} ({typ})", wertpapier.isin)?;
-        writeln!(f, "{}", wertpapier.name)?;
+        writeln!(f, "{} ({})", wertpapier.name, wertpapier.typ)?;
+        write!(f, "ISIN: {}", wertpapier.isin)?;
+        if let Some(symbol) = &wertpapier.symbol {
+            writeln!(f, " ({})", symbol)?;
+        } else {
+            f.write_char('\n')?;
+        }
         writeln!(f, "{:=<BREITE$}", "")
     }
 }
@@ -42,7 +43,7 @@ impl fmt::Display for ReportBestandAm {
         let mut w = Writer::new(f);
 
         w.write_split_fmt(
-            format_args!("Bestand am {}:", self.datum),
+            format_args!("{}: Bestand", self.datum),
             ReportBestand(self.bestand.stück, self.bestand.preis),
         )
         // w.divider('=')
@@ -66,7 +67,7 @@ pub fn schreibe_jahr<W: fmt::Write>(w: &mut W, jahr: &Jahr) -> fmt::Result {
 
     let bestand = jahr.bestand_anfang;
     w.write_split_fmt(
-        format_args!("Bestand am {}:", jahr.erster()),
+        format_args!("{}: Bestand", jahr.erster()),
         ReportBestand(bestand.stück, bestand.preis),
     )?;
 
@@ -77,50 +78,47 @@ pub fn schreibe_jahr<W: fmt::Write>(w: &mut W, jahr: &Jahr) -> fmt::Result {
         w.divider('-')?;
         match &transaktion.typ {
             TransaktionsTyp::Kauf { stück, preis } => {
-                writeln!(w, "Kauf am {datum}: {}", ReportBestand(*stück, *preis))?;
+                writeln!(w, "{datum}: Kauf {}", ReportBestand(*stück, *preis))?;
             }
             TransaktionsTyp::Verkauf { stück, preis } => {
-                writeln!(w, "Verkauf am {datum}: {}", ReportBestand(*stück, *preis))?;
+                writeln!(w, "{datum}: Verkauf {}", ReportBestand(*stück, *preis))?;
             }
 
             TransaktionsTyp::Split { faktor } => {
-                writeln!(w, "Aktiensplit am {datum} mit Faktor {faktor}")?;
+                writeln!(w, "{datum}: Aktiensplit mit Faktor {faktor}")?;
             }
             TransaktionsTyp::Ausgliederung { faktor, isin } => {
-                writeln!(
-                    w,
-                    "Ausgliederung am {datum} von `{isin}` mit Faktor {faktor}"
-                )?;
+                writeln!(w, "{datum}: Ausgliederung von `{isin}` mit Faktor {faktor}")?;
             }
             TransaktionsTyp::Einbuchung { stück, preis } => {
                 writeln!(
                     w,
-                    "Einbuchung nach Ausgliederung am {datum}: {}",
+                    "{datum}: Einbuchung nach Ausgliederung {}",
                     ReportBestand(*stück, *preis)
                 )?;
             }
             TransaktionsTyp::Spitzenverwertung { stück, preis } => {
                 writeln!(
                     w,
-                    "Spitzenverwertung am {datum}: {}",
+                    "{datum}: Spitzenverwertung {}",
                     ReportBestand(*stück, *preis)
                 )?;
             }
 
             TransaktionsTyp::Dividende { auszahlung, .. } => {
-                writeln!(w, "Dividendenzahlung am {datum}:")?;
+                writeln!(w, "{datum}: Dividendenzahlung")?;
                 writeln!(w, "Auszahlung: {}", Eur(*auszahlung, 2))?;
             }
             TransaktionsTyp::Ausschüttung { brutto, melde_id } => {
                 if let Some(melde_id) = melde_id {
-                    writeln!(w, "Ausschüttung mit Meldung am {datum} (Id: {melde_id})")?;
+                    writeln!(w, "{datum}: Ausschüttung mit Meldung (Id: {melde_id})")?;
                 } else {
-                    writeln!(w, "Ausschüttung ohne Meldung am {datum}:")?;
+                    writeln!(w, "{datum}: Ausschüttung ohne Meldung")?;
                 }
                 writeln!(w, "Auszahlung: {}", Eur(*brutto, 2))?;
             }
             TransaktionsTyp::Jahresmeldung { melde_id } => {
-                writeln!(w, "Jahresmeldung am {datum} (Id: {melde_id}):")?;
+                writeln!(w, "{datum}: Jahresmeldung (Id: {melde_id})")?;
             }
         }
         print_steuern(&mut w, &transaktion.steuer)?;

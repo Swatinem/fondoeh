@@ -5,6 +5,7 @@ pub struct Wertpapier {
     pub typ: WertpapierTyp,
     pub name: String,
     pub isin: String,
+    pub symbol: Option<String>,
     pub jahre: Vec<Jahr>,
 }
 

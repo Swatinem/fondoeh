@@ -125,6 +125,14 @@ impl Kursabfrage {
         };
         Ok(daten.into_iter().nth(idx).unwrap())
     }
+
+    pub async fn kurs_für_isin(&self, isin: &str, datum: Datum) -> Result<Kursdaten> {
+        let metadaten = self
+            .aktie_suchen(isin)
+            .await?
+            .with_context(|| format!("Aktie `{isin}` sollte gefunden werden"))?;
+        self.kurs_abrufen(&metadaten.symbol, datum).await
+    }
 }
 
 mod raw {
