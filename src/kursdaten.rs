@@ -7,7 +7,7 @@ const SEARCH_BASE: &str =
     "https://query2.finance.yahoo.com/v1/finance/search?quotesCount=5&newsCount=0&q=";
 const CHART_BASE: &str = "https://query1.finance.yahoo.com/v8/finance/chart/";
 
-const BÖRSEN: &[&str] = &["GER", "FRA", "STU"];
+const BÖRSEN: &[&str] = &["GER", "FRA", "STU", "PAR", "AMS"];
 
 #[derive(Debug)]
 pub struct Metadaten {
@@ -51,7 +51,7 @@ impl Kursdaten {
         let (_idx, aktie) = aktien
             .into_iter()
             .next()
-            .context("Aktie sollte gefunden werden")?;
+            .with_context(|| format!("Aktie `{isin}` sollte gefunden werden"))?;
 
         let name = aktie.longname.unwrap_or(aktie.shortname);
 
