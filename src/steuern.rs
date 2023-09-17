@@ -103,14 +103,10 @@ pub fn ausgliederung_berechnen(
         preis: anderer_kurs,
     };
 
-    dbg!(bestand);
-    dbg!(eigener_bestand.summe(), anderer_bestand.summe());
     let gesamtwert = eigener_bestand.summe() + anderer_bestand.summe();
     let prozentual = eigener_bestand.summe() / gesamtwert;
-    dbg!(prozentual);
 
     bestand.preis = runde(bestand.preis * prozentual, 4);
-    dbg!(bestand);
 
     (
         bestand,

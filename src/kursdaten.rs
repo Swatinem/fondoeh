@@ -1,13 +1,13 @@
 use anyhow::{Context, Result};
-use chrono::Days;
+use chrono::{Days, NaiveDateTime};
 
-use crate::{Datum, Zahl};
+use crate::{zahl_aus_float, Datum, Zahl};
 
 const SEARCH_BASE: &str =
-    "https://query2.finance.yahoo.com/v1/finance/search?quotesCount=5&newsCount=0&q=";
+    "https://query2.finance.yahoo.com/v1/finance/search?quotesCount=5&newsCount=0&listsCount=0&q=";
 const CHART_BASE: &str = "https://query1.finance.yahoo.com/v8/finance/chart/";
 
-const BÖRSEN: &[&str] = &["GER", "FRA", "STU", "PAR", "AMS"];
+const BÖRSEN: &[&str] = &["GER", "FRA", "STU", "VIE", "PAR", "AMS", "NYQ"];
 
 #[derive(Debug)]
 pub struct Metadaten {
@@ -17,10 +17,17 @@ pub struct Metadaten {
 
 #[derive(Debug)]
 pub struct Kursdaten {
+    pub datum: Datum,
+    pub open: Zahl,
+    pub close: Zahl,
+}
+
+#[derive(Debug)]
+pub struct Kursabfrage {
     client: reqwest::Client,
 }
 
-impl Kursdaten {
+impl Kursabfrage {
     pub fn new() -> Self {
         let client = reqwest::Client::new();
 
@@ -28,9 +35,9 @@ impl Kursdaten {
     }
 }
 
-impl Kursdaten {
-    pub async fn aktie_suchen(&self, isin: &str) -> Result<Metadaten> {
-        let list_url = format!("{SEARCH_BASE}{isin}");
+impl Kursabfrage {
+    pub async fn aktie_suchen(&self, suche: &str) -> Result<Option<Metadaten>> {
+        let list_url = format!("{SEARCH_BASE}{suche}");
         let list = self.client.get(list_url).send().await?;
 
         let list: raw::Search = list.json().await.context("Aktie suchen")?;
@@ -48,22 +55,24 @@ impl Kursdaten {
             .collect();
         aktien.sort_by_key(|aktien| aktien.0);
 
-        let (_idx, aktie) = aktien
-            .into_iter()
-            .next()
-            .with_context(|| format!("Aktie `{isin}` sollte gefunden werden"))?;
+        let Some((_idx, aktie)) = aktien.into_iter().next() else {
+            return Ok(None);
+        };
 
-        let name = aktie.longname.unwrap_or(aktie.shortname);
+        let name = aktie
+            .longname
+            .or(aktie.shortname)
+            .context("Aktie sollte einen namen haben")?;
 
-        Ok(Metadaten {
+        Ok(Some(Metadaten {
             symbol: aktie.symbol,
             name,
-        })
+        }))
     }
 
-    pub async fn kurs_abrufen(&self, symbol: &str, datum: Datum) -> Result<Zahl> {
+    pub async fn kurse_abrufen(&self, symbol: &str, datum: Datum) -> Result<Vec<Kursdaten>> {
         let vorher = (datum - Days::new(1)).and_hms_opt(0, 0, 0).unwrap();
-        let nachher = (datum + Days::new(2)).and_hms_opt(0, 0, 0).unwrap();
+        let nachher = (datum + Days::new(14)).and_hms_opt(0, 0, 0).unwrap();
 
         let chart_url = format!(
             "{CHART_BASE}{symbol}?interval=1d&period1={}&period2={}",
@@ -80,28 +89,41 @@ impl Kursdaten {
             .next()
             .context("Kursdaten abfragen sollte ein Ergebnis liefern")?;
 
-        // let erster_timestamp = result
-        //     .timestamp
-        //     .into_iter()
-        //     .next()
-        //     .context("Es sollte ein Kurs (Zeitpunkt) existieren")?;
-        // dbg!(NaiveDateTime::from_timestamp_opt(erster_timestamp, 0));
-
-        let erster_kurs = result
+        let timestamps = result.timestamp.into_iter();
+        let daten = result
             .indicators
             .quote
             .into_iter()
             .next()
             .context("Es sollte ein Chart existieren")?;
-        let erster_kurs = erster_kurs
-            .open
-            .into_iter()
-            .next()
-            .context("Es sollte ein Kurs existieren")?;
+        let open = daten.open.into_iter();
+        let close = daten.close.into_iter();
 
-        let kurs = (erster_kurs * 10_000.) as i64;
-        let kurs = Zahl::new(kurs, 10_000);
-        Ok(kurs)
+        let daten: Vec<_> = timestamps
+            .zip(open)
+            .zip(close)
+            .map(|((ts, open), close)| {
+                let datum = NaiveDateTime::from_timestamp_opt(ts, 0).unwrap();
+                let datum = datum.date();
+                Kursdaten {
+                    datum,
+                    open: zahl_aus_float(open),
+                    close: zahl_aus_float(close),
+                }
+            })
+            .collect();
+
+        Ok(daten)
+    }
+
+    pub async fn kurs_abrufen(&self, symbol: &str, datum: Datum) -> Result<Kursdaten> {
+        let daten = self.kurse_abrufen(symbol, datum).await?;
+
+        let idx = match daten.binary_search_by_key(&datum, |daten| daten.datum) {
+            Ok(idx) => idx,
+            Err(idx) => idx,
+        };
+        Ok(daten.into_iter().nth(idx).unwrap())
     }
 }
 
@@ -115,7 +137,7 @@ mod raw {
     pub struct SearchQuote {
         pub exchange: String,
         pub symbol: String,
-        pub shortname: String,
+        pub shortname: Option<String>,
         pub longname: Option<String>,
     }
 
@@ -153,10 +175,11 @@ mod raw {
     #[derive(Debug, serde::Deserialize)]
     pub struct ChartQuote {
         pub open: Vec<f64>,
+        pub close: Vec<f64>,
     }
 }
 
-impl Default for Kursdaten {
+impl Default for Kursabfrage {
     fn default() -> Self {
         Self::new()
     }
@@ -168,22 +191,22 @@ mod tests {
 
     #[tokio::test]
     async fn aktien_suchen() {
-        let kursdaten = Kursdaten::new();
-        let siemens = kursdaten.aktie_suchen("DE0007236101").await.unwrap();
+        let kursabfrage = Kursabfrage::new();
+        let siemens = kursabfrage.aktie_suchen("DE0007236101").await.unwrap();
         dbg!(&siemens);
-        let siemens_energy = kursdaten.aktie_suchen("DE000ENER6Y0").await.unwrap();
+        let siemens_energy = kursabfrage.aktie_suchen("DE000ENER6Y0").await.unwrap();
         dbg!(&siemens_energy);
 
         let datum = Datum::from_ymd_opt(2020, 9, 28).unwrap();
 
-        let kurs = kursdaten
-            .kurs_abrufen(&siemens.symbol, datum)
+        let kurs = kursabfrage
+            .kurs_abrufen(&siemens.unwrap().symbol, datum)
             .await
             .unwrap();
         dbg!(kurs);
 
-        let kurs = kursdaten
-            .kurs_abrufen(&siemens_energy.symbol, datum)
+        let kurs = kursabfrage
+            .kurs_abrufen(&siemens_energy.unwrap().symbol, datum)
             .await
             .unwrap();
         dbg!(kurs);

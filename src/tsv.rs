@@ -59,7 +59,7 @@ pub fn schreibe_tsv<W: fmt::Write>(
             TransaktionsTyp::Split { faktor } => {
                 write!(w, "Split\t{}\t\t\t\t\t", faktor)?;
             }
-            TransaktionsTyp::Ausgliederung { faktor, isin } => {
+            TransaktionsTyp::Ausgliederung { faktor, .. } => {
                 write!(w, "Ausgliederung\t{}\t\t\t\t\t", faktor)?;
             }
             TransaktionsTyp::Einbuchung { stück, preis } => {

@@ -1,9 +1,9 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::{Datelike, Days};
 use num_traits::identities::Zero;
 
 use crate::format;
-use crate::kursdaten::Kursdaten;
+use crate::kursdaten::Kursabfrage;
 use crate::meldungen::Scraper;
 use crate::steuern::{
     ausgliederung_berechnen, ausschüttung_berechnen, dividende_berechnen, einbuchung_berechnen,
@@ -16,13 +16,13 @@ use crate::{Bestand, Datum, Jahr, Transaktion, TransaktionsTyp, Wertpapier, Wert
 pub struct Rechner {
     pub heute: Datum,
     scraper: Scraper,
-    kursdaten: Kursdaten,
+    kursdaten: Kursabfrage,
 }
 impl Rechner {
     pub fn new() -> Self {
         let heute = chrono::Local::now().date_naive();
         let scraper = Scraper::new();
-        let kursdaten = Kursdaten::new();
+        let kursdaten = Kursabfrage::new();
         Self {
             heute,
             scraper,
@@ -36,8 +36,9 @@ impl Rechner {
     ) -> Result<Wertpapier> {
         let format::Wertpapier {
             typ,
-            // mut name,
+            mut name,
             isin,
+            mut symbol,
             mut transaktionen,
             ..
         } = wertpapier;
@@ -46,19 +47,19 @@ impl Rechner {
         let mut transaktionen = transaktionen.into_iter().peekable();
 
         let mut meldungen = vec![];
-        let mut symbol = String::new();
 
-        let name = if typ == WertpapierTyp::Etf {
+        if typ == WertpapierTyp::Etf {
             let meldungsdaten = self.scraper.fetch_meldungen(&isin).await?;
 
             meldungen = meldungsdaten.meldungen;
-            meldungsdaten.name
+            name = meldungsdaten.name;
         } else {
-            let metadaten = self.kursdaten.aktie_suchen(&isin).await?;
-
-            symbol = metadaten.symbol;
-            metadaten.name
-        };
+            let suche = symbol.as_deref().unwrap_or(isin.as_str());
+            if let Some(metadaten) = self.kursdaten.aktie_suchen(suche).await? {
+                symbol = Some(metadaten.symbol);
+                name = metadaten.name;
+            }
+        }
 
         let mut meldungen = meldungen.into_iter().peekable();
 
@@ -146,18 +147,30 @@ impl Rechner {
                     split_berechnen(bestand, faktor)
                 }
                 format::Transaktion::Ausgliederung(_, format::Zahl(faktor), isin) => {
-                    let eigener_kurs = self.kursdaten.kurs_abrufen(&symbol, datum).await?;
-                    let andere_metadaten = self.kursdaten.aktie_suchen(&isin).await?;
+                    let symbol = symbol.as_deref().context("Aktie sollte ein Symbol haben")?;
+                    let eigener_kurs = self.kursdaten.kurs_abrufen(symbol, datum).await?;
+                    let andere_metadaten = self
+                        .kursdaten
+                        .aktie_suchen(&isin)
+                        .await?
+                        .context("Aktie sollte gefunden werden")?;
                     let anderer_kurs = self
                         .kursdaten
                         .kurs_abrufen(&andere_metadaten.symbol, datum)
                         .await?;
 
-                    ausgliederung_berechnen(bestand, faktor, isin, eigener_kurs, anderer_kurs)
+                    ausgliederung_berechnen(
+                        bestand,
+                        faktor,
+                        isin,
+                        eigener_kurs.open,
+                        anderer_kurs.open,
+                    )
                 }
                 format::Transaktion::Einbuchung(_, format::Zahl(stück)) => {
-                    let preis = self.kursdaten.kurs_abrufen(&symbol, datum).await?;
-                    einbuchung_berechnen(bestand, stück, preis)
+                    let symbol = symbol.as_deref().context("Aktie sollte ein Symbol haben")?;
+                    let kurs = self.kursdaten.kurs_abrufen(symbol, datum).await?;
+                    einbuchung_berechnen(bestand, stück, kurs.open)
                 }
                 format::Transaktion::Spitzenverwertung(
                     _,

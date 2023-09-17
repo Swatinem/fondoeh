@@ -75,6 +75,11 @@ pub struct SteuerAusschüttung {
     pub anrechenbare_quellensteuer_998: Zahl,
 }
 
+pub fn zahl_aus_float(f: f64) -> Zahl {
+    let zahl = (f * 10_000.).round() as i64;
+    Zahl::new(zahl, 10_000)
+}
+
 impl Bestand {
     pub fn summe(&self) -> Zahl {
         self.stück * self.preis
