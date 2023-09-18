@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use chrono::{Days, NaiveDateTime};
 
-use crate::cache::Cache;
+use crate::cacher::Cacher;
 use crate::{zahl_aus_float, Datum, String, Zahl};
 
 const SEARCH_BASE: &str =
@@ -28,11 +28,11 @@ pub struct Kursdaten {
 
 #[derive(Debug)]
 pub struct Kursabfrage {
-    cacher: Cache,
+    cacher: Cacher,
 }
 
 impl Kursabfrage {
-    pub fn new(cacher: Cache) -> Self {
+    pub fn new(cacher: Cacher) -> Self {
         Self { cacher }
     }
 }
@@ -204,7 +204,7 @@ mod tests {
 
     #[tokio::test]
     async fn aktien_suchen() {
-        let cacher = Cache::new().await.unwrap();
+        let cacher = Cacher::new().await.unwrap();
         let kursabfrage = Kursabfrage::new(cacher.clone());
         let siemens = kursabfrage.aktie_suchen("DE0007236101").await.unwrap();
         let siemens_energy = kursabfrage.aktie_suchen("DE000ENER6Y0").await.unwrap();

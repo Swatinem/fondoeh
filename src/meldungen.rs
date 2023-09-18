@@ -1,9 +1,10 @@
 use std::borrow::Cow;
-use std::collections::BTreeMap;
 
 use anyhow::{Context, Result};
 
+use crate::cacher::Cacher;
 use crate::format;
+use crate::waehrungen::{Kurs, Währungen};
 use crate::{Datum, String, Zahl};
 
 const OEKB_LIST_BASE: &str = "https://my.oekb.at/fond-info/rest/public/steuerMeldung/isin";
@@ -13,9 +14,6 @@ const OEKB_REPORT_BASE: &str = "https://my.oekb.at/fond-info/rest/public/steuerM
 const CONTEXT_HEADER_NAME: &str = "OeKB-Platform-Context";
 const CONTEXT_HEADER_VALUE: &str =
     "eyJsYW5ndWFnZSI6ImRlIiwicGxhdGZvcm0iOiJLTVMiLCJkYXNoYm9hcmQiOiJLTVNfT1VUUFVUIn0=";
-
-const ECB_USD: &str = "https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/usd.xml";
-// TODO: https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/hkd.xml
 
 mod raw {
     use super::*;
@@ -95,69 +93,31 @@ pub struct FondMeldung {
 }
 
 #[derive(Debug)]
-pub struct Scraper {
-    client: reqwest::Client,
-    usd_kurse: BTreeMap<Datum, Zahl>,
+pub struct Meldungen {
+    heute: Datum,
+    cacher: Cacher,
+    währungen: Währungen,
 }
 
-impl Scraper {
-    pub fn new() -> Self {
-        let client = reqwest::Client::new();
-        let usd_kurse = Default::default();
-
-        Self { client, usd_kurse }
-    }
-
-    async fn get_währungs_kurs(&mut self, währung: &str, datum: Datum) -> Result<Zahl> {
-        match währung {
-            "EUR" => return Ok(1.into()),
-            "USD" => {}
-            _ => {
-                panic!("Currency {währung} not supported")
-            }
+impl Meldungen {
+    pub fn new(cacher: Cacher, währungen: Währungen) -> Self {
+        let heute = chrono::Local::now().date_naive();
+        Self {
+            heute,
+            cacher,
+            währungen,
         }
-        if self.usd_kurse.is_empty() {
-            self.usd_kurse = self.fetch_usd_kurse().await?;
-        }
-        Ok(self.usd_kurse.get(&datum).copied().unwrap_or(1.into()))
-    }
-
-    async fn fetch_usd_kurse(&self) -> Result<BTreeMap<Datum, Zahl>> {
-        let doc = self.client.get(ECB_USD).send().await?;
-        let doc = doc.text().await?;
-
-        let mut rates = BTreeMap::new();
-
-        for line in doc.lines() {
-            // <Obs TIME_PERIOD="2023-09-01" OBS_VALUE="1.0844" OBS_STATUS="A" OBS_CONF="F"/>
-            let Some(line) = line.trim_start().strip_prefix("<Obs TIME_PERIOD=\"") else {
-                continue;
-            };
-            let Some((date, rest)) = line.split_once("\" OBS_VALUE=\"") else {
-                continue;
-            };
-            let Some((rate, _rest)) = rest.split_once("\" OBS") else {
-                continue;
-            };
-            let date: Datum = date.parse()?;
-            let rate: Zahl = format::Zahl::try_from(Cow::Borrowed(rate))?.0;
-            rates.insert(date, rate);
-        }
-
-        Ok(rates)
     }
 
     pub async fn fetch_meldungen(&self, isin: &str) -> Result<FondMeldungen> {
-        let list_url = format!("{OEKB_LIST_BASE}/{isin}");
-        let list = self
-            .client
-            .get(list_url)
-            .header(CONTEXT_HEADER_NAME, CONTEXT_HEADER_VALUE)
-            .send()
-            .await?;
-        // let text = list.text().await?;
-        // println!("{text}");
-        let list: raw::FondMeldungen = list.json().await.context("Meldungen einlesen")?;
+        let key = format!("meldungen-{isin}-{}", self.heute);
+        let url = format!("{OEKB_LIST_BASE}/{isin}");
+        let builder = self
+            .cacher
+            .get(&url)
+            .header(CONTEXT_HEADER_NAME, CONTEXT_HEADER_VALUE);
+        let list = self.cacher.get_request(&key, builder).await?;
+        let list: raw::FondMeldungen = serde_json::from_str(&list).context("Meldungen einlesen")?;
 
         let mut name = String::new("");
         let mut meldungen = Vec::with_capacity(list.list.len());
@@ -191,35 +151,35 @@ impl Scraper {
         })
     }
 
-    pub async fn fetch_meldungs_details(&mut self, report: &mut FondMeldung) -> Result<()> {
-        let details_url = format!("{OEKB_REPORT_BASE}/{}/privatAnl", report.melde_id);
-        let raw_details = self
-            .client
-            .get(details_url)
-            .header(CONTEXT_HEADER_NAME, CONTEXT_HEADER_VALUE)
-            .send()
-            .await?;
-        // let text = raw_details.text().await?;
-        // println!("{text}");
-        // serde_json::from_str(&text)
-        let raw_details: raw::Meldungsdetails = raw_details
-            .json()
-            .await
-            .context("Meldungsdetails einlesen")?;
+    pub async fn fetch_meldungs_details(&mut self, meldung: &mut FondMeldung) -> Result<()> {
+        let key = format!("meldung-{}-privatAnl", meldung.melde_id);
+        let url = format!("{OEKB_REPORT_BASE}/{}/privatAnl", meldung.melde_id);
+        let builder = self
+            .cacher
+            .get(&url)
+            .header(CONTEXT_HEADER_NAME, CONTEXT_HEADER_VALUE);
+        let raw_details = self.cacher.get_request(&key, builder).await?;
+        let raw_details: raw::Meldungsdetails =
+            serde_json::from_str(&raw_details).context("Meldungsdetails einlesen")?;
 
-        report.währungskurs = self
-            .get_währungs_kurs(&report.währung, report.datum)
+        meldung.währungskurs = self
+            .währungen
+            .kurs_in_euro(Kurs {
+                wert: 1.into(),
+                währung: meldung.währung.clone(),
+                datum: meldung.datum,
+            })
             .await?;
 
         for raw_row in raw_details.list {
             match raw_row.key.as_str() {
-                "StB_E1KV_Ausschuettungen" => report.StB_E1KV_Ausschuettungen = raw_row.value.0,
-                "StB_E1KV_AGErtraege" => report.StB_E1KV_AGErtraege = raw_row.value.0,
+                "StB_E1KV_Ausschuettungen" => meldung.StB_E1KV_Ausschuettungen = raw_row.value.0,
+                "StB_E1KV_AGErtraege" => meldung.StB_E1KV_AGErtraege = raw_row.value.0,
                 "StB_E1KV_anzurechnende_ausl_Quellensteuer" => {
-                    report.StB_E1KV_anzurechnende_ausl_Quellensteuer = raw_row.value.0
+                    meldung.StB_E1KV_anzurechnende_ausl_Quellensteuer = raw_row.value.0
                 }
                 "StB_E1KV_Korrekturbetrag_saldiert" => {
-                    report.StB_E1KV_Korrekturbetrag_saldiert = raw_row.value.0
+                    meldung.StB_E1KV_Korrekturbetrag_saldiert = raw_row.value.0
                 }
                 _ => {}
             }
@@ -231,25 +191,21 @@ impl Scraper {
     }
 }
 
-impl Default for Scraper {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[tokio::test]
     async fn test_korrigierter_report() {
-        let mut scraper = Scraper::new();
+        let cacher = Cacher::new().await.unwrap();
+        let währungen = Währungen::new(cacher.clone());
+        let mut meldungen = Meldungen::new(cacher, währungen);
 
-        let mut report = scraper.fetch_meldungen("IE00B9CQXS71").await.unwrap();
+        let mut report = meldungen.fetch_meldungen("IE00B9CQXS71").await.unwrap();
         dbg!(&report);
 
-        let meldung = &mut report.meldungen[0];
-        scraper.fetch_meldungs_details(meldung).await.unwrap();
+        let meldung = report.meldungen.last_mut().unwrap();
+        meldungen.fetch_meldungs_details(meldung).await.unwrap();
         dbg!(meldung);
     }
 }

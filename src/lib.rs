@@ -1,7 +1,7 @@
 extern crate alloc;
 
 pub mod berechnung;
-pub mod cache;
+pub mod cacher;
 pub mod format;
 pub mod formatierung;
 pub mod kursdaten;

@@ -1,9 +1,11 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use tokio::sync::Mutex;
 
-use crate::cache::Cache;
+use crate::cacher::Cacher;
 use crate::{Datum, String, Zahl};
 
 const ECB_BASE: &str =
@@ -16,23 +18,41 @@ pub struct Kurs {
     pub datum: Datum,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Währungen {
+    inner: Arc<Mutex<WährungenInner>>,
+}
+
+#[derive(Debug)]
+struct WährungenInner {
     heute: Datum,
-    cacher: Cache,
+    cacher: Cacher,
     cache: HashMap<String, BTreeMap<Datum, Zahl>>,
 }
 
 impl Währungen {
-    pub fn new(cacher: Cache) -> Self {
+    pub fn new(cacher: Cacher) -> Self {
         let heute = chrono::Local::now().date_naive();
-        Self {
+        let inner = Arc::new(Mutex::new(WährungenInner {
             heute,
             cacher,
             cache: Default::default(),
-        }
+        }));
+        Self { inner }
     }
 
+    #[tracing::instrument(skip(self))]
+    pub async fn kurs_in_euro(&mut self, kurs: Kurs) -> Result<Zahl> {
+        if kurs.währung == "EUR" {
+            return Ok(kurs.wert);
+        }
+
+        let mut inner = self.inner.lock().await;
+        inner.kurs_in_euro(kurs).await
+    }
+}
+
+impl WährungenInner {
     async fn kurse_abrufen(&self, währung: &str) -> Result<BTreeMap<Datum, Zahl>> {
         let key = format!("{währung}-{}", self.heute);
         let url = format!("{ECB_BASE}/{}.xml", währung.to_lowercase());
@@ -60,11 +80,7 @@ impl Währungen {
         Ok(kurse)
     }
 
-    #[tracing::instrument(skip(self))]
-    pub async fn kurs_in_euro(&mut self, kurs: Kurs) -> Result<Zahl> {
-        if kurs.währung == "EUR" {
-            return Ok(kurs.wert);
-        }
+    async fn kurs_in_euro(&mut self, kurs: Kurs) -> Result<Zahl> {
         if !self.cache.contains_key(&kurs.währung) {
             let kurse = self.kurse_abrufen(&kurs.währung).await?;
             self.cache.insert(kurs.währung.clone(), kurse);

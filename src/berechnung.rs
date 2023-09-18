@@ -2,10 +2,10 @@ use anyhow::{Context, Result};
 use chrono::{Datelike, Days};
 use num_traits::identities::Zero;
 
-use crate::cache::Cache;
+use crate::cacher::Cacher;
 use crate::format;
 use crate::kursdaten::Kursabfrage;
-use crate::meldungen::Scraper;
+use crate::meldungen::Meldungen;
 use crate::steuern::{
     ausgliederung_berechnen, ausschüttung_berechnen, dividende_berechnen, einbuchung_berechnen,
     kauf_berechnen, meldung_berechnen, spitzenverwertung_berechnen, split_berechnen,
@@ -17,20 +17,20 @@ use crate::{Bestand, Datum, Jahr, Transaktion, TransaktionsTyp, Wertpapier, Wert
 #[derive(Debug)]
 pub struct Rechner {
     pub heute: Datum,
-    scraper: Scraper,
+    meldungen: Meldungen,
     kursabfrage: Kursabfrage,
     währungen: Währungen,
 }
 impl Rechner {
     pub async fn new() -> Result<Self> {
         let heute = chrono::Local::now().date_naive();
-        let scraper = Scraper::new();
-        let cacher = Cache::new().await?;
+        let cacher = Cacher::new().await?;
+        let währungen = Währungen::new(cacher.clone());
         let kursabfrage = Kursabfrage::new(cacher.clone());
-        let währungen = Währungen::new(cacher);
+        let meldungen = Meldungen::new(cacher, währungen.clone());
         Ok(Self {
             heute,
-            scraper,
+            meldungen,
             kursabfrage,
             währungen,
         })
@@ -55,7 +55,7 @@ impl Rechner {
         let mut meldungen = vec![];
 
         if typ == WertpapierTyp::Etf {
-            let meldungsdaten = self.scraper.fetch_meldungen(&isin).await?;
+            let meldungsdaten = self.meldungen.fetch_meldungen(&isin).await?;
 
             meldungen = meldungsdaten.meldungen;
             name = meldungsdaten.name;
@@ -100,7 +100,9 @@ impl Rechner {
                 let gibt_bestand = !bestand.stück.is_zero();
                 if gibt_bestand {
                     // meldung anwenden
-                    self.scraper.fetch_meldungs_details(nächste_meldung).await?;
+                    self.meldungen
+                        .fetch_meldungs_details(nächste_meldung)
+                        .await?;
 
                     if nächste_meldung.ist_jahresmeldung {
                         let steuer = meldung_berechnen(&mut bestand, nächste_meldung);

@@ -5,7 +5,7 @@ use anyhow::Result;
 use tokio::fs;
 
 #[derive(Debug, Clone)]
-pub struct Cache {
+pub struct Cacher {
     inner: Arc<CacheInner>,
 }
 
@@ -15,7 +15,7 @@ struct CacheInner {
     cache_dir: PathBuf,
 }
 
-impl Cache {
+impl Cacher {
     pub async fn new() -> Result<Self> {
         let client = reqwest::Client::new();
         let cache_dir = ".cache".into();
