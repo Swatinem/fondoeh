@@ -41,7 +41,7 @@ impl Währungen {
         Self { inner }
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(err, skip(self))]
     pub async fn kurs_in_euro(&mut self, kurs: Kurs) -> Result<Zahl> {
         if kurs.währung == "EUR" {
             return Ok(kurs.wert);

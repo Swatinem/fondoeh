@@ -31,9 +31,11 @@ struct Args {
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
+    tracing_subscriber::fmt().init();
+
     let gefundene_daten = finde_alle_daten(args.daten)?;
 
-    let mut rechner = Rechner::new();
+    let mut rechner = Rechner::new().await?;
 
     let mut wertpapiere = Vec::with_capacity(gefundene_daten.len());
     for (pfad, wertpapier) in gefundene_daten {

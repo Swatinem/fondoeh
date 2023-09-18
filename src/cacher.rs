@@ -28,7 +28,7 @@ impl Cacher {
         self.inner.client.get(url)
     }
 
-    #[tracing::instrument(skip_all, fields(url))]
+    #[tracing::instrument(err, skip_all, fields(url))]
     pub async fn get_request(&self, key: &str, builder: reqwest::RequestBuilder) -> Result<String> {
         let (client, request) = builder.build_split();
         let request = request?;
