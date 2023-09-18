@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use chrono::{Datelike, Days};
 use num_traits::identities::Zero;
 
+use crate::cache::Cache;
 use crate::format;
 use crate::kursdaten::Kursabfrage;
 use crate::meldungen::Scraper;
@@ -10,6 +11,7 @@ use crate::steuern::{
     kauf_berechnen, meldung_berechnen, spitzenverwertung_berechnen, split_berechnen,
     verkauf_berechnen,
 };
+use crate::waehrungen::{Kurs, Währungen};
 use crate::{Bestand, Datum, Jahr, Transaktion, TransaktionsTyp, Wertpapier, WertpapierTyp};
 
 #[derive(Debug)]
@@ -17,17 +19,21 @@ pub struct Rechner {
     pub heute: Datum,
     scraper: Scraper,
     kursabfrage: Kursabfrage,
+    währungen: Währungen,
 }
 impl Rechner {
-    pub fn new() -> Self {
+    pub async fn new() -> Result<Self> {
         let heute = chrono::Local::now().date_naive();
         let scraper = Scraper::new();
-        let kursdaten = Kursabfrage::new(todo!());
-        Self {
+        let cacher = Cache::new().await?;
+        let kursabfrage = Kursabfrage::new(cacher.clone());
+        let währungen = Währungen::new(cacher);
+        Ok(Self {
             heute,
             scraper,
-            kursabfrage: kursdaten,
-        }
+            kursabfrage,
+            währungen,
+        })
     }
 
     pub async fn wertpapier_auswerten(
@@ -148,14 +154,30 @@ impl Rechner {
                 }
                 format::Transaktion::Ausgliederung(_, format::Zahl(faktor), andere_isin) => {
                     let eigener_kurs = self.kursabfrage.kurs_für_isin(&isin, datum).await?;
+                    let eigener_kurs = self
+                        .währungen
+                        .kurs_in_euro(Kurs {
+                            wert: eigener_kurs.open,
+                            währung: eigener_kurs.währung,
+                            datum,
+                        })
+                        .await?;
                     let anderer_kurs = self.kursabfrage.kurs_für_isin(&andere_isin, datum).await?;
+                    let anderer_kurs = self
+                        .währungen
+                        .kurs_in_euro(Kurs {
+                            wert: anderer_kurs.open,
+                            währung: anderer_kurs.währung,
+                            datum,
+                        })
+                        .await?;
 
                     ausgliederung_berechnen(
                         bestand,
                         faktor,
                         andere_isin,
-                        eigener_kurs.open,
-                        anderer_kurs.open,
+                        eigener_kurs,
+                        anderer_kurs,
                     )
                 }
                 format::Transaktion::Einbuchung(_, format::Zahl(stück)) => {
@@ -212,12 +234,6 @@ impl Rechner {
     }
 }
 
-impl Default for Rechner {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 fn transaktion_anfügen(jahre: &mut Vec<Jahr>, transaktion: Transaktion) {
     let jahr = transaktion.datum.year();
     jahre_abschließen(jahre, jahr);
@@ -268,19 +284,33 @@ mod tests {
 
     #[tokio::test]
     async fn test_berechnung() {
-        let wertpapier = serde_yaml::from_str(
+        let mut rechner = Rechner::new().await.unwrap();
+
+        let tencent = serde_yaml::from_str(
             r#"
 typ: aktie
-name: Foo
-isin: DE000
+name: Tencent
+isin: KYG875721634
 transaktionen:
-- kauf: [2021-01-01, 40, 30.23]
-- verkauf: [2022-02-02, 40, 32]
+- kauf: [2023-01-01, 100, 100]
+- ausgliederung: [2023-01-05, 1/10, KYG596691041]
         "#,
         )
         .unwrap();
-        let mut rechner = Rechner::new();
-        let wertpapier = rechner.wertpapier_auswerten(wertpapier).await.unwrap();
-        dbg!(wertpapier);
+        let tencent = rechner.wertpapier_auswerten(tencent).await.unwrap();
+        dbg!(&tencent);
+
+        let meituan = serde_yaml::from_str(
+            r#"
+typ: aktie
+name: Meituan
+isin: KYG596691041
+transaktionen:
+- einbuchung: [2022-01-05, 10]
+        "#,
+        )
+        .unwrap();
+        let meituan = rechner.wertpapier_auswerten(meituan).await.unwrap();
+        dbg!(&meituan);
     }
 }

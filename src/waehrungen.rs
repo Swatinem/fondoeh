@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashMap};
 use anyhow::{Context, Result};
 
 use crate::cache::Cache;
-use crate::{Datum, Zahl};
+use crate::{Datum, String, Zahl};
 
 const ECB_BASE: &str =
     "https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html";
@@ -74,9 +74,11 @@ impl Währungen {
             .get(&kurs.währung)
             .expect("Kurse sollten verfügbar sein");
 
-        kurse
+        let umrechnungskurs = kurse
             .get(&kurs.datum)
             .copied()
-            .context("Es sollte einen Umrechnungskurs geben")
+            .context("Es sollte einen Umrechnungskurs geben")?;
+
+        Ok(kurs.wert / umrechnungskurs)
     }
 }

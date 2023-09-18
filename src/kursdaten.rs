@@ -198,12 +198,14 @@ mod raw {
 
 #[cfg(test)]
 mod tests {
+    use crate::waehrungen::{Kurs, Währungen};
+
     use super::*;
 
     #[tokio::test]
     async fn aktien_suchen() {
-        let cache = Cache::new().await.unwrap();
-        let kursabfrage = Kursabfrage::new(cache);
+        let cacher = Cache::new().await.unwrap();
+        let kursabfrage = Kursabfrage::new(cacher.clone());
         let siemens = kursabfrage.aktie_suchen("DE0007236101").await.unwrap();
         let siemens_energy = kursabfrage.aktie_suchen("DE000ENER6Y0").await.unwrap();
         dbg!(&siemens, &siemens_energy);
@@ -214,13 +216,13 @@ mod tests {
             .kurs_abrufen(&siemens.unwrap().symbol, datum)
             .await
             .unwrap();
-        dbg!(kurs);
+        dbg!(&kurs);
 
         let kurs = kursabfrage
             .kurs_abrufen(&siemens_energy.unwrap().symbol, datum)
             .await
             .unwrap();
-        dbg!(kurs);
+        dbg!(&kurs);
 
         let tencent = kursabfrage.aktie_suchen("KYG875721634").await.unwrap();
         let meituan = kursabfrage.aktie_suchen("KYG596691041").await.unwrap();
@@ -232,12 +234,21 @@ mod tests {
             .kurs_abrufen(&tencent.unwrap().symbol, datum)
             .await
             .unwrap();
-        dbg!(kurs);
+        dbg!(&kurs);
 
         let kurs = kursabfrage
             .kurs_abrufen(&meituan.unwrap().symbol, datum)
             .await
             .unwrap();
-        dbg!(kurs);
+        dbg!(&kurs);
+
+        let mut währungen = Währungen::new(cacher);
+        let kurs = Kurs {
+            wert: kurs.open,
+            währung: kurs.währung,
+            datum,
+        };
+        let kurs = währungen.kurs_in_euro(kurs).await.unwrap();
+        dbg!(&kurs);
     }
 }
