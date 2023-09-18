@@ -306,7 +306,7 @@ typ: aktie
 name: Meituan
 isin: KYG596691041
 transaktionen:
-- einbuchung: [2022-01-05, 10]
+- einbuchung: [2023-01-05, 10]
         "#,
         )
         .unwrap();

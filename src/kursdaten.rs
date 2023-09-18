@@ -228,7 +228,7 @@ mod tests {
         let meituan = kursabfrage.aktie_suchen("KYG596691041").await.unwrap();
         dbg!(&tencent, &meituan);
 
-        let datum = Datum::from_ymd_opt(2020, 9, 28).unwrap();
+        let datum = Datum::from_ymd_opt(2023, 1, 5).unwrap();
 
         let kurs = kursabfrage
             .kurs_abrufen(&tencent.unwrap().symbol, datum)
