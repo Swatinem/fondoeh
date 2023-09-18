@@ -1,4 +1,4 @@
-pub use crate::format::{Datum, Rational64 as Zahl, WertpapierTyp};
+pub use crate::format::{Datum, Rational64 as Zahl, String, WertpapierTyp};
 
 #[derive(Debug)]
 pub struct Wertpapier {

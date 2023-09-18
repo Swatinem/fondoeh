@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result};
 
 use crate::format;
-use crate::{Datum, Zahl};
+use crate::{Datum, String, Zahl};
 
 const OEKB_LIST_BASE: &str = "https://my.oekb.at/fond-info/rest/public/steuerMeldung/isin";
 const OEKB_REPORT_BASE: &str = "https://my.oekb.at/fond-info/rest/public/steuerMeldung/stmId";
@@ -159,7 +159,7 @@ impl Scraper {
         // println!("{text}");
         let list: raw::FondMeldungen = list.json().await.context("Meldungen einlesen")?;
 
-        let mut name = String::new();
+        let mut name = String::new("");
         let mut meldungen = Vec::with_capacity(list.list.len());
 
         for info in list.list {

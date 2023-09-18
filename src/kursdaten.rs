@@ -1,7 +1,8 @@
 use anyhow::{Context, Result};
 use chrono::{Days, NaiveDateTime};
 
-use crate::{zahl_aus_float, Datum, Zahl};
+use crate::cache::Cache;
+use crate::{zahl_aus_float, Datum, String, Zahl};
 
 const SEARCH_BASE: &str =
     "https://query2.finance.yahoo.com/v1/finance/search?quotesCount=5&newsCount=0&listsCount=0&q=";
@@ -19,6 +20,7 @@ pub struct Metadaten {
 
 #[derive(Debug)]
 pub struct Kursdaten {
+    pub währung: String,
     pub datum: Datum,
     pub open: Zahl,
     pub close: Zahl,
@@ -26,23 +28,22 @@ pub struct Kursdaten {
 
 #[derive(Debug)]
 pub struct Kursabfrage {
-    client: reqwest::Client,
+    cacher: Cache,
 }
 
 impl Kursabfrage {
-    pub fn new() -> Self {
-        let client = reqwest::Client::new();
-
-        Self { client }
+    pub fn new(cacher: Cache) -> Self {
+        Self { cacher }
     }
 }
 
 impl Kursabfrage {
     pub async fn aktie_suchen(&self, suche: &str) -> Result<Option<Metadaten>> {
+        let key = format!("suche-{suche}");
         let url = format!("{SEARCH_BASE}{suche}");
-        tracing::debug!(?url, "Aktie suchen");
-        let list = self.client.get(url).send().await?;
-        let list: raw::Search = list.json().await.context("Aktie suchen")?;
+        let builder = self.cacher.get(&url);
+        let list = self.cacher.get_request(&key, builder).await?;
+        let list: raw::Search = serde_json::from_str(&list).context("Aktie suchen")?;
 
         let mut aktien: Vec<_> = list
             .quotes
@@ -76,14 +77,15 @@ impl Kursabfrage {
         let vorher = (datum - Days::new(1)).and_hms_opt(0, 0, 0).unwrap();
         let nachher = (datum + Days::new(14)).and_hms_opt(0, 0, 0).unwrap();
 
+        let key = format!("{symbol}-{datum}");
         let url = format!(
             "{CHART_BASE}{symbol}?interval=1d&period1={}&period2={}",
             vorher.timestamp(),
             nachher.timestamp()
         );
-        tracing::debug!(?url, "Kursdaten abrufen");
-        let chart = self.client.get(url).send().await?;
-        let chart: raw::Chart = chart.json().await.context("Kursdaten abrufen")?;
+        let builder = self.cacher.get(&url);
+        let chart = self.cacher.get_request(&key, builder).await?;
+        let chart: raw::Chart = serde_json::from_str(&chart).context("Kursdaten abrufen")?;
 
         let result = chart
             .chart
@@ -101,6 +103,7 @@ impl Kursabfrage {
             .context("Es sollte ein Chart existieren")?;
         let open = daten.open.into_iter();
         let close = daten.close.into_iter();
+        let währung = result.meta.currency;
 
         let daten: Vec<_> = timestamps
             .zip(open)
@@ -109,6 +112,7 @@ impl Kursabfrage {
                 let datum = NaiveDateTime::from_timestamp_opt(ts, 0).unwrap();
                 let datum = datum.date();
                 Kursdaten {
+                    währung: währung.clone(),
                     datum,
                     open: zahl_aus_float(open),
                     close: zahl_aus_float(close),
@@ -139,6 +143,8 @@ impl Kursabfrage {
 }
 
 mod raw {
+    use super::*;
+
     #[derive(Debug, serde::Deserialize)]
     pub struct Search {
         pub quotes: Vec<SearchQuote>,
@@ -190,23 +196,17 @@ mod raw {
     }
 }
 
-impl Default for Kursabfrage {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[tokio::test]
     async fn aktien_suchen() {
-        let kursabfrage = Kursabfrage::new();
+        let cache = Cache::new().await.unwrap();
+        let kursabfrage = Kursabfrage::new(cache);
         let siemens = kursabfrage.aktie_suchen("DE0007236101").await.unwrap();
-        dbg!(&siemens);
         let siemens_energy = kursabfrage.aktie_suchen("DE000ENER6Y0").await.unwrap();
-        dbg!(&siemens_energy);
+        dbg!(&siemens, &siemens_energy);
 
         let datum = Datum::from_ymd_opt(2020, 9, 28).unwrap();
 
@@ -218,6 +218,24 @@ mod tests {
 
         let kurs = kursabfrage
             .kurs_abrufen(&siemens_energy.unwrap().symbol, datum)
+            .await
+            .unwrap();
+        dbg!(kurs);
+
+        let tencent = kursabfrage.aktie_suchen("KYG875721634").await.unwrap();
+        let meituan = kursabfrage.aktie_suchen("KYG596691041").await.unwrap();
+        dbg!(&tencent, &meituan);
+
+        let datum = Datum::from_ymd_opt(2020, 9, 28).unwrap();
+
+        let kurs = kursabfrage
+            .kurs_abrufen(&tencent.unwrap().symbol, datum)
+            .await
+            .unwrap();
+        dbg!(kurs);
+
+        let kurs = kursabfrage
+            .kurs_abrufen(&meituan.unwrap().symbol, datum)
             .await
             .unwrap();
         dbg!(kurs);

@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 pub use chrono::naive::NaiveDate as Datum;
 pub use num_rational::Rational64;
 use serde::Deserialize;
+pub use smol_str::SmolStr as String;
 
 #[derive(Debug, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]

@@ -22,7 +22,7 @@ impl Rechner {
     pub fn new() -> Self {
         let heute = chrono::Local::now().date_naive();
         let scraper = Scraper::new();
-        let kursdaten = Kursabfrage::new();
+        let kursdaten = Kursabfrage::new(todo!());
         Self {
             heute,
             scraper,

@@ -1,7 +1,7 @@
 use num_traits::identities::Zero;
 
 use crate::meldungen::FondMeldung;
-use crate::{Bestand, TransaktionsTyp, Zahl};
+use crate::{Bestand, String, TransaktionsTyp, Zahl};
 use crate::{Steuer, SteuerAusschüttung, SteuerDividende, SteuerVerkauf};
 
 type Ergebnis = (Bestand, TransaktionsTyp, Steuer);
