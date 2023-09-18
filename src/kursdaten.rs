@@ -8,10 +8,6 @@ const SEARCH_BASE: &str =
     "https://query2.finance.yahoo.com/v1/finance/search?quotesCount=5&newsCount=0&listsCount=0&q=";
 const CHART_BASE: &str = "https://query1.finance.yahoo.com/v8/finance/chart/";
 
-const BÖRSEN: &[&str] = &[
-    "GER", "FRA", /*"STU",*/ "VIE", "PAR", "AMS", "NYQ", "HKG",
-];
-
 #[derive(Debug)]
 pub struct Metadaten {
     pub symbol: String,
@@ -45,20 +41,7 @@ impl Kursabfrage {
         let list = self.cacher.get_request(&key, builder).await?;
         let list: raw::Search = serde_json::from_str(&list).context("Aktie suchen")?;
 
-        let mut aktien: Vec<_> = list
-            .quotes
-            .into_iter()
-            .filter_map(|suche| {
-                let idx = BÖRSEN
-                    .iter()
-                    .enumerate()
-                    .find_map(|(idx, b)| (**b == suche.exchange).then_some(idx))?;
-                Some((idx, suche))
-            })
-            .collect();
-        aktien.sort_by_key(|aktien| aktien.0);
-
-        let Some((_idx, aktie)) = aktien.into_iter().next() else {
+        let Some(aktie) = list.quotes.into_iter().next() else {
             return Ok(None);
         };
 
