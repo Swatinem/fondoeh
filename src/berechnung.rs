@@ -185,7 +185,15 @@ impl Rechner {
                 format::Transaktion::Einbuchung(_, format::Zahl(stück)) => {
                     let symbol = symbol.as_deref().context("Aktie sollte ein Symbol haben")?;
                     let kurs = self.kursabfrage.kurs_abrufen(symbol, datum).await?;
-                    einbuchung_berechnen(bestand, stück, kurs.open)
+                    let kurs = self
+                        .währungen
+                        .kurs_in_euro(Kurs {
+                            wert: kurs.open,
+                            währung: kurs.währung,
+                            datum: kurs.datum,
+                        })
+                        .await?;
+                    einbuchung_berechnen(bestand, stück, kurs)
                 }
                 format::Transaktion::Spitzenverwertung(
                     _,
