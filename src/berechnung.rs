@@ -128,7 +128,7 @@ impl Rechner {
                             meldung = meldungen.next();
                             break;
                         } else {
-                            dbg!(name, nächste_transaktion, nächste_meldung);
+                            dbg!(name, bestand, nächste_transaktion, nächste_meldung);
                             panic!("meldung ohne Ausschüttung");
                         }
                     }

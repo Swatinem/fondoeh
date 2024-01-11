@@ -1,7 +1,9 @@
+use std::ops::AddAssign;
+
 use num_traits::identities::Zero;
 
 use crate::meldungen::FondMeldung;
-use crate::{Bestand, String, TransaktionsTyp, Zahl};
+use crate::{Bestand, SteuerJahr, String, TransaktionsTyp, Zahl};
 use crate::{Steuer, SteuerAusschüttung, SteuerDividende, SteuerVerkauf};
 
 type Ergebnis = (Bestand, TransaktionsTyp, Steuer);
@@ -201,4 +203,37 @@ pub fn meldung_berechnen(bestand: &mut Bestand, meldung: &FondMeldung) -> Steuer
 fn runde(zahl: Zahl, stellen: u32) -> Zahl {
     let faktor = 10_i64.pow(stellen);
     (zahl * faktor).round() / faktor
+}
+
+impl SteuerJahr {
+    pub fn berechne_nachzahlung(&self) -> Zahl {
+        let zu_versteuern = self.überschüsse_994 - self.verluste_892
+            + self.dividendenerträge_863
+            + self.ausschüttungen_898
+            + self.ausschüttungsgleiche_erträge_937;
+        let steuer = zu_versteuern * Zahl::new(275, 1000);
+        steuer - self.gezahlte_inländische_kest_899 - self.anrechenbare_quellensteuer_998
+    }
+}
+
+impl AddAssign<Steuer> for SteuerJahr {
+    fn add_assign(&mut self, steuer: Steuer) {
+        match steuer {
+            Steuer::Keine => {}
+            Steuer::Verkauf(s) => {
+                self.überschüsse_994 += s.überschüsse_994;
+                self.verluste_892 += s.verluste_892;
+            }
+            Steuer::Dividende(s) => {
+                self.dividendenerträge_863 += s.dividendenerträge_863;
+                self.gezahlte_inländische_kest_899 += s.gezahlte_inländische_kest_899;
+                self.anrechenbare_quellensteuer_998 += s.anrechenbare_quellensteuer_998;
+            }
+            Steuer::Ausschüttung(s) => {
+                self.ausschüttungen_898 += s.ausschüttungen_898;
+                self.ausschüttungsgleiche_erträge_937 += s.ausschüttungsgleiche_erträge_937;
+                self.anrechenbare_quellensteuer_998 += s.anrechenbare_quellensteuer_998;
+            }
+        }
+    }
 }

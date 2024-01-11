@@ -38,7 +38,6 @@ pub enum TransaktionsTyp {
     Verkauf { stück: Zahl, preis: Zahl },
 
     Split { faktor: Zahl },
-    // TODO:
     Ausgliederung { faktor: Zahl, isin: String },
     Einbuchung { stück: Zahl, preis: Zahl },
     Spitzenverwertung { stück: Zahl, preis: Zahl },
@@ -74,6 +73,31 @@ pub struct SteuerAusschüttung {
     pub ausschüttungen_898: Zahl,
     pub ausschüttungsgleiche_erträge_937: Zahl,
     pub anrechenbare_quellensteuer_998: Zahl,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SteuerJahr {
+    pub jahr: i32,
+
+    pub überschüsse_994: Zahl,
+    pub verluste_892: Zahl,
+
+    pub dividendenerträge_863: Zahl,
+
+    pub ausschüttungen_898: Zahl,
+    pub ausschüttungsgleiche_erträge_937: Zahl,
+
+    pub gezahlte_inländische_kest_899: Zahl,
+    pub anrechenbare_quellensteuer_998: Zahl,
+}
+
+impl SteuerJahr {
+    pub fn new(jahr: i32) -> Self {
+        Self {
+            jahr,
+            ..Default::default()
+        }
+    }
 }
 
 pub fn zahl_aus_float(f: f64) -> Zahl {

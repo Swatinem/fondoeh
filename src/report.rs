@@ -4,7 +4,7 @@ use std::fmt::Write;
 use num_traits::Zero;
 
 use crate::formatierung::{Eur, Stück};
-use crate::{Bestand, Datum, Jahr, Steuer, TransaktionsTyp, Wertpapier, Zahl};
+use crate::{Bestand, Datum, Jahr, Steuer, SteuerJahr, TransaktionsTyp, Wertpapier, Zahl};
 
 pub const BREITE: usize = 80;
 
@@ -242,4 +242,56 @@ pub fn print_steuern<W: Write>(w: &mut Writer<W>, steuer: &Steuer) -> fmt::Resul
         }
     }
     Ok(())
+}
+
+pub struct SteuerSumme {
+    pub summe: SteuerJahr,
+}
+
+impl fmt::Display for SteuerSumme {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let steuer = self.summe;
+        let mut w = Writer::new(f);
+
+        writeln!(w, "Zusammenfassung für Jahr {}", steuer.jahr)?;
+        writeln!(w)?;
+
+        w.write_split(
+            "Überschüsse aus realisierten Wertsteigerungen (994):",
+            Eur(steuer.überschüsse_994, 2),
+        )?;
+        w.write_split(
+            "Verluste aus realisierten Wertverlusten (892):",
+            Eur(steuer.verluste_892, 2),
+        )?;
+
+        writeln!(w)?;
+        w.write_split(
+            "Einkünfte aus Dividenden (863):",
+            Eur(steuer.dividendenerträge_863, 2),
+        )?;
+
+        writeln!(w)?;
+        w.write_split("Ausschüttungen (898):", Eur(steuer.ausschüttungen_898, 2))?;
+        w.write_split(
+            "Ausschüttungsgleiche Erträge (937):",
+            Eur(steuer.ausschüttungsgleiche_erträge_937, 2),
+        )?;
+
+        writeln!(w)?;
+        w.write_split(
+            "Gezahlte inländische KeSt (899):",
+            Eur(steuer.gezahlte_inländische_kest_899, 2),
+        )?;
+        w.write_split(
+            "Anrechenbare ausländische Quellensteuer (998):",
+            Eur(steuer.anrechenbare_quellensteuer_998, 2),
+        )?;
+
+        let nachzahlung = steuer.berechne_nachzahlung();
+        writeln!(w)?;
+        w.write_split("Steuernachzahlung:", Eur(nachzahlung, 2))?;
+
+        Ok(())
+    }
 }

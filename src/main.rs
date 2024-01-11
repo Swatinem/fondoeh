@@ -57,6 +57,12 @@ async fn main() -> anyhow::Result<()> {
 
     let mut wertpapiere = wertpapiere.iter().peekable();
 
+    let mut summe_steuer = if !args.tsv {
+        args.jahr.map(SteuerJahr::new)
+    } else {
+        None
+    };
+
     while let Some(wertpapier) = wertpapiere.next() {
         let mut jahre = wertpapier.iter_jahre(args.jahr).peekable();
         if jahre.peek().is_none() {
@@ -75,6 +81,12 @@ async fn main() -> anyhow::Result<()> {
                 write!(w, "{}", report::ReportJahr { jahr })?;
             }
             letztes_jahr = Some(jahr);
+
+            if let Some(summe) = &mut summe_steuer {
+                for t in &jahr.transaktionen {
+                    *summe += t.steuer;
+                }
+            }
         }
         if !args.tsv {
             let letztes_jahr = letztes_jahr.unwrap();
@@ -85,12 +97,16 @@ async fn main() -> anyhow::Result<()> {
             };
             write!(w, "{bestand}")?;
 
-            if wertpapiere.peek().is_some() {
+            if wertpapiere.peek().is_some() || args.jahr.is_some() {
                 writeln!(w)?;
                 writeln!(w, "{:#<BREITE$}", "")?;
                 writeln!(w)?;
             }
         }
+    }
+
+    if let Some(summe) = summe_steuer {
+        writeln!(w, "{}", report::SteuerSumme { summe })?;
     }
 
     Ok(())
