@@ -86,16 +86,21 @@ impl TryFrom<Cow<'_, str>> for Zahl {
 fn parse_kommazahl(s: &str) -> Result<Rational64> {
     let mut split = s.trim().splitn(2, '.');
     let vor = split.next().context("Zahl erwartet")?;
+    let (vor, vorzeichen) = if let Some(vor) = vor.strip_prefix('-') {
+        (vor, -1)
+    } else {
+        (vor, 1)
+    };
     let zahl = Rational64::new(vor.parse()?, 1);
 
     let Some(nach) = split.next() else {
-        return Ok(zahl);
+        return Ok(zahl * vorzeichen);
     };
 
     let faktor = 10_i64.pow(nach.len() as u32);
     let nach = Rational64::new(nach.parse()?, 1);
 
-    Ok((zahl * faktor + nach) / faktor)
+    Ok((zahl * faktor + nach) / faktor * vorzeichen)
 }
 
 #[cfg(test)]
