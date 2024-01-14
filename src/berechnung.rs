@@ -314,19 +314,19 @@ impl Rechner {
                     TransaktionsTyp::Kauf { stück, preis } => {
                         wert_anfang += stück * preis;
                     }
-                    TransaktionsTyp::Verkauf { stück, preis } => {
+                    TransaktionsTyp::Verkauf { .. } => {
                         // TODO
                     }
-                    TransaktionsTyp::Ausgliederung { faktor, isin } => {
+                    TransaktionsTyp::Ausgliederung { .. } => {
                         todo!()
                     }
-                    TransaktionsTyp::Einbuchung { stück, preis } => {
+                    TransaktionsTyp::Einbuchung { .. } => {
                         todo!()
                     }
-                    TransaktionsTyp::Spitzenverwertung { stück, preis } => {
+                    TransaktionsTyp::Spitzenverwertung { .. } => {
                         todo!()
                     }
-                    TransaktionsTyp::Dividende { brutto, .. } => {
+                    TransaktionsTyp::Dividende { .. } => {
                         // transaktion.typ = TransaktionsTyp::Ausschüttung {
                         //     brutto: *brutto,
                         //     melde_id: None,
