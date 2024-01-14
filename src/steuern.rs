@@ -200,6 +200,36 @@ pub fn meldung_berechnen(bestand: &mut Bestand, meldung: &FondMeldung) -> Steuer
     Steuer::Ausschüttung(steuer)
 }
 
+// Laut § 186 (2) 3. InvFG 2011:
+// ausschüttungsgleichen Erträge […], sind diese in Höhe von 90 vH des
+// Unterschiedsbetrages zwischen dem ersten und letzten im Kalenderjahr
+// festgesetzten Rücknahmepreis, mindestens jedoch in Höhe von 10 vH des
+// am Ende des Kalenderjahres festgesetzten Rücknahmepreises zu schätzen.
+pub fn ausschüttungsgleiche_beträge_berechnen(
+    stück: Zahl,
+    wert_anfang: Zahl,
+    wert_ende: Zahl,
+) -> (Zahl, TransaktionsTyp, Steuer) {
+    let mut steuer = SteuerAusschüttung::default();
+
+    dbg!(wert_anfang, wert_ende);
+    let unterschied = wert_ende - wert_anfang;
+    steuer.ausschüttungsgleiche_erträge_937 =
+        (unterschied * Zahl::new(90, 100)).max(wert_ende * Zahl::new(10, 100));
+
+    // Erhöhung der Anschaffungskosten:
+    let korrektur = runde(steuer.ausschüttungsgleiche_erträge_937 / stück, 4);
+
+    (
+        korrektur,
+        TransaktionsTyp::Ausschüttung {
+            brutto: Zahl::default(),
+            melde_id: None,
+        },
+        Steuer::Ausschüttung(steuer),
+    )
+}
+
 fn runde(zahl: Zahl, stellen: u32) -> Zahl {
     let faktor = 10_i64.pow(stellen);
     (zahl * faktor).round() / faktor

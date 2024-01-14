@@ -10,15 +10,17 @@ pub use smol_str::SmolStr as String;
 #[derive(Debug, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]
 pub enum WertpapierTyp {
-    Etf,
     Aktie,
+    Etf,
+    Fond,
 }
 
 impl fmt::Display for WertpapierTyp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
-            WertpapierTyp::Etf => "ETF",
             WertpapierTyp::Aktie => "Aktie",
+            WertpapierTyp::Etf => "ETF",
+            WertpapierTyp::Fond => "(schwarzer) Fond",
         })
     }
 }
