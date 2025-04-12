@@ -37,8 +37,8 @@ pub struct Wertpapier {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Transaktion {
-    Kauf(Datum, Zahl, Zahl),
-    Verkauf(Datum, Zahl, Zahl),
+    Kauf(Datum, Zahl, Zahl, #[serde(default)] Option<Zahl>),
+    Verkauf(Datum, Zahl, Zahl, #[serde(default)] Option<Zahl>),
 
     Split(Datum, Zahl),
     Ausgliederung(Datum, Zahl, String),
@@ -52,8 +52,8 @@ pub enum Transaktion {
 impl Transaktion {
     pub fn datum(&self) -> Datum {
         match self {
-            Transaktion::Kauf(datum, _, _) => *datum,
-            Transaktion::Verkauf(datum, _, _) => *datum,
+            Transaktion::Kauf(datum, _, _, _) => *datum,
+            Transaktion::Verkauf(datum, _, _, _) => *datum,
             Transaktion::Spitzenverwertung(datum, _, _) => *datum,
             Transaktion::Ausgliederung(datum, _, _) => *datum,
             Transaktion::Einbuchung(datum, _) => *datum,

@@ -4,6 +4,8 @@ use std::sync::Arc;
 use anyhow::Result;
 use tokio::fs;
 
+const DEFAULT_UA: &str = "Mozilla/5.0 (X11; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0";
+
 #[derive(Debug, Clone)]
 pub struct Cacher {
     inner: Arc<CacheInner>,
@@ -17,7 +19,11 @@ struct CacheInner {
 
 impl Cacher {
     pub async fn new() -> Result<Self> {
-        let client = reqwest::Client::new();
+        let client = reqwest::ClientBuilder::new()
+            .cookie_store(true)
+            .referer(false)
+            .user_agent(DEFAULT_UA)
+            .build()?;
         let cache_dir = ".cache".into();
         fs::create_dir_all(&cache_dir).await?;
         let inner = Arc::new(CacheInner { client, cache_dir });

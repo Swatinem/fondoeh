@@ -75,10 +75,10 @@ impl Rechner {
             let datum = transaktion.datum();
 
             let (bestand_, typ, steuer) = match transaktion {
-                format::Transaktion::Kauf(_, format::Zahl(stück), format::Zahl(preis)) => {
+                format::Transaktion::Kauf(_, format::Zahl(stück), format::Zahl(preis), _) => {
                     kauf_berechnen(bestand, stück, preis)
                 }
-                format::Transaktion::Verkauf(_, format::Zahl(stück), format::Zahl(preis)) => {
+                format::Transaktion::Verkauf(_, format::Zahl(stück), format::Zahl(preis), _) => {
                     verkauf_berechnen(bestand, stück, preis)
                 }
 
@@ -255,10 +255,10 @@ impl Rechner {
             let mut datum = transaktion.datum();
 
             let (bestand_, typ, steuer) = match transaktion {
-                format::Transaktion::Kauf(_, format::Zahl(stück), format::Zahl(preis)) => {
+                format::Transaktion::Kauf(_, format::Zahl(stück), format::Zahl(preis), _) => {
                     kauf_berechnen(bestand, stück, preis)
                 }
-                format::Transaktion::Verkauf(_, format::Zahl(stück), format::Zahl(preis)) => {
+                format::Transaktion::Verkauf(_, format::Zahl(stück), format::Zahl(preis), _) => {
                     verkauf_berechnen(bestand, stück, preis)
                 }
 
